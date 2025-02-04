@@ -12,8 +12,7 @@ import {
   FaHome,
 } from "react-icons/fa";
 
-const Sidebar = () => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
   const [activeSubmenu, setActiveSubmenu] = useState("");
 
   const sidebarClass = isCollapsed
@@ -43,7 +42,7 @@ const Sidebar = () => {
 
   return (
     <div
-      className={`${sidebarClass} bg-gradient-to-b from-slate-800 to-slate-900 min-h-screen fixed left-0 top-0 z-40 pt-16 px-3 shadow-xl transition-all duration-300 ease-in-out`}
+      className={`${sidebarClass} bg-gradient-to-b from-slate-800 to-slate-900 min-h-screen fixed left-0 top-0 z-40 pt-16 px-3 shadow-xl`}
     >
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
@@ -62,7 +61,7 @@ const Sidebar = () => {
         <div className="border-t border-slate-700 my-4"></div>
 
         {/* Simulation Tools */}
-        {menuItem("/simulations", <FaCalculator />, "Simulation Tools")}
+        {menuItem("/simulation", <FaCalculator />, "Simulation Tools")}
         {!isCollapsed && activeSubmenu === "sims" && (
           <div className="ml-4 space-y-1">
             {menuItem("/cooling-sim", <FaTemperatureHigh />, "Cooling Systems")}

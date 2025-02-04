@@ -1,21 +1,18 @@
+import React, { useState } from "react";
 import { Outlet } from "react-router-dom";
-import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
-function MainLayout() {
+const MainLayout = () => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <div className="flex">
-        <Sidebar />
-        <main className="flex-1 ml-16 md:ml-64 min-h-screen pt-16 p-6 bg-gray-50">
-          <div className="max-w-7xl mx-auto">
-            <Outlet />
-          </div>
-        </main>
+    <div className="flex">
+      <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'ml-16' : 'ml-64'}`}>
+        <Outlet context={{ isCollapsed }} />
       </div>
     </div>
   );
-}
+};
 
 export default MainLayout;

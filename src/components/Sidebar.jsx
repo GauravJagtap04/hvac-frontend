@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useDispatch } from 'react-redux';
+import { supabase } from './SupabaseClient';
+import { logout } from '../store/slices/authSlice';
 import {
   FaTemperatureHigh,
   FaWind,
@@ -10,10 +13,14 @@ import {
   FaTools,
   FaChevronLeft,
   FaHome,
+  FaSignOutAlt,
 } from "react-icons/fa";
 
 const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
   const [activeSubmenu, setActiveSubmenu] = useState("");
+
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
 
   const sidebarClass = isCollapsed
     ? "w-16 transition-all duration-300 ease-in-out"
@@ -39,6 +46,16 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       )}
     </NavLink>
   );
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      dispatch(logout());
+      navigate('/login');
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  };
 
   return (
     <div
@@ -83,6 +100,21 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
 
         {/* Settings */}
         {menuItem("/settings", <FaCog />, "Settings")}
+
+        <div className="border-t border-slate-700 my-4"></div>
+
+        {/* Logout Button */}
+        <button
+          onClick={handleLogout}
+          className={`flex items-center p-3 text-slate-200 hover:bg-slate-700 rounded-lg mb-1 transition-colors w-full`}
+        >
+          <span className="text-xl"><FaSignOutAlt /></span>
+          {!isCollapsed && (
+            <span className="ml-3 text-sm font-medium whitespace-nowrap">
+              Logout
+            </span>
+          )}
+        </button>
       </div>
 
       {!isCollapsed && (

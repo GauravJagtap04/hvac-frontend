@@ -1,13 +1,14 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { ArrowUpIcon, ArrowDownIcon } from "@heroicons/react/24/solid";
 import TemperatureGraph from "./TemperatureGraph";
 
+
 const Parameters = ({ onParametersChange, simulationData }) => {
-  // Example of how the real-time data would be structured
-  const parameters = {
+  const [currentHumidity, setCurrentHumidity] = useState(45);
+  const [parameters, setParameters] = useState({
     energyUsage: { value: 850, trend: "up", unit: "kWh" },
     airflow: { value: 1200, trend: "down", unit: "CFM" },
-    humidity: { value: 45, trend: "stable", unit: "%" },
+    humidity: currentHumidity,
     envTemp: { value: 22.5, trend: "up", unit: "°C" },
     powerConsumption: { value: 3200, trend: "up", unit: "W" },
     timeRequired: { value: 8.5, trend: "stable", unit: "hours" },
@@ -17,7 +18,23 @@ const Parameters = ({ onParametersChange, simulationData }) => {
       trend: "stable",
       unit: "",
     },
-  };
+  });
+
+
+  useEffect(() => {
+    const ws = new WebSocket("ws://localhost:8000/ws");
+
+    ws.onopen = () => setConnectionStatus("connected");
+    ws.onmessage = (event) => {
+      const humidity = parseFloat(event.data.split(": ")[2]); // Extract number from "Temperature: 24.5°C"
+      console.log(humidity);
+      setCurrentHumidity(humidity);
+
+
+    };
+
+
+  }, []);
 
   const getTrendIcon = (trend) => {
     if (trend === "up") return <ArrowUpIcon className="w-4 h-4 text-red-500" />;
@@ -26,11 +43,10 @@ const Parameters = ({ onParametersChange, simulationData }) => {
     return null;
   };
 
-  // Update parameters if simulationData exists
-  React.useEffect(() => {
+  useEffect(() => {
     if (simulationData) {
-      const updatedParameters = {
-        ...parameters,
+      setParameters(prev => ({
+        ...prev,
         powerConsumption: {
           value: simulationData.hvacPower * 1000,
           trend: "stable",
@@ -51,8 +67,7 @@ const Parameters = ({ onParametersChange, simulationData }) => {
           trend: "stable",
           unit: "",
         },
-      };
-      onParametersChange(updatedParameters);
+      }));
     }
   }, [simulationData]);
 

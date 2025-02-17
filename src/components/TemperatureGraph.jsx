@@ -27,23 +27,42 @@ const TemperatureGraph = ({ targetTemp }) => {
   const [connectionStatus, setConnectionStatus] = useState("connecting");
 
   useEffect(() => {
-    const ws = new WebSocket("ws://localhost:8000/ws");
+    let ws;
+    let reconnectAllowed = true; // Prevent reconnection during unmount
 
-    ws.onopen = () => setConnectionStatus("connected");
-    ws.onmessage = (event) => {
-      const temp = parseFloat(event.data.split(": ")[1]); // Extract number from "Temperature: 24.5°C"
-      setCurrentTemp(temp);
+    const connectWebSocket = () => {
+      ws = new WebSocket("ws://localhost:8000/ws");
 
-      setTemperatureHistory((prev) => {
-        const updated = [...prev, temp];
-        return updated.slice(-11);
-      });
+      ws.onopen = () => setConnectionStatus("connected");
+
+      ws.onmessage = (event) => {
+        const temp = parseFloat(event.data.split(": ")[1]);
+        setCurrentTemp(temp);
+        setTemperatureHistory((prev) => {
+          const updated = [...prev, temp];
+          return updated.slice(-11);
+        });
+      };
+
+      ws.onerror = () => {
+        setConnectionStatus("error");
+        ws.close();
+      };
+
+      ws.onclose = () => {
+        setConnectionStatus("disconnected");
+        if (reconnectAllowed) {
+          setTimeout(connectWebSocket, 3000);
+        }
+      };
     };
 
-    ws.onerror = () => setConnectionStatus("error");
-    ws.onclose = () => setConnectionStatus("disconnected");
+    connectWebSocket();
 
-    return () => ws.close();
+    return () => {
+      reconnectAllowed = false;
+      if (ws) ws.close();
+    };
   }, []);
 
   const generateTimeLabels = () => {
@@ -99,7 +118,8 @@ const TemperatureGraph = ({ targetTemp }) => {
           Status: <span className="font-bold">{connectionStatus}</span>
         </div>
         <div className="text-lg">
-          Temperature: {currentTemp ? `${currentTemp.toFixed(1)}°C` : "Loading..."}
+          Temperature:{" "}
+          {currentTemp ? `${currentTemp.toFixed(1)}°C` : "Loading..."}
         </div>
       </div>
       <div className="h-[300px] mt-6 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">

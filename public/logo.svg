@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Outer Circle -->
+    <circle cx="256" cy="256" r="240" stroke="#2563EB" stroke-width="24" fill="white"/>
+    
+    <!-- Fan Blades -->
+    <g transform="translate(256 256)">
+        <!-- Rotating fan blades -->
+        <path d="M0,-120 C30,-110 60,-90 80,-40 L0,0 Z" fill="#2563EB" transform="rotate(0)"/>
+        <path d="M0,-120 C30,-110 60,-90 80,-40 L0,0 Z" fill="#2563EB" transform="rotate(120)"/>
+        <path d="M0,-120 C30,-110 60,-90 80,-40 L0,0 Z" fill="#2563EB" transform="rotate(240)"/>
+    </g>
+    
+    <!-- Center Circle -->
+    <circle cx="256" cy="256" r="40" fill="#1E40AF"/>
+    
+    <!-- Air Flow Lines -->
+    <g stroke="#93C5FD" stroke-width="8" stroke-linecap="round">
+        <path d="M120,256 C180,226 220,226 256,256" />
+        <path d="M256,120 C286,180 286,220 256,256" />
+        <path d="M392,256 C332,286 292,286 256,256" />
+        <path d="M256,392 C226,332 226,292 256,256" />
+    </g>
+</svg>

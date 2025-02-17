@@ -13,10 +13,24 @@ const SimulationPage = () => {
   };
 
   const handleUserParametersSubmit = (userParams) => {
-    setSimulationData({
+    const updatedData = {
       ...simulationData,
       ...userParams,
-    });
+    };
+    setSimulationData(updatedData);
+
+    // Send user parameters to backend for calculations
+    fetch("http://localhost:8000/api/calculate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updatedData),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        console.log("Calculation result:", data);
+        // Optionally handle backend data
+      })
+      .catch((error) => console.error("Backend error:", error));
   };
 
   return (

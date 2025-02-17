@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { useDispatch } from 'react-redux';
-import { supabase } from './SupabaseClient';
-import { logout } from '../store/slices/authSlice';
+import { useDispatch } from "react-redux";
+import { supabase } from "./SupabaseClient";
+import { logout } from "../store/slices/authSlice";
 import {
   FaTemperatureHigh,
   FaWind,
@@ -51,9 +51,9 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
     try {
       await supabase.auth.signOut();
       dispatch(logout());
-      navigate('/login');
+      navigate("/login");
     } catch (error) {
-      console.error('Error logging out:', error);
+      console.error("Error logging out:", error);
     }
   };
 
@@ -61,6 +61,16 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
     <div
       className={`${sidebarClass} bg-gradient-to-b from-slate-800 to-slate-900 min-h-screen fixed left-0 top-0 z-40 pt-16 px-3 shadow-xl`}
     >
+      {/* Logo Section */}
+      <div className="flex items-center mb-6 px-2">
+        <img src="/logo.svg" alt="HVAC Logo" className="h-8 w-8" />
+        {!isCollapsed && (
+          <span className="ml-3 text-lg font-bold text-white">
+            HVAC Simulation
+          </span>
+        )}
+      </div>
+
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
         className="absolute right-0 top-20 bg-slate-700 p-1 rounded-l-md transform translate-x-full shadow-md hover:bg-slate-600 transition-colors"
@@ -108,7 +118,9 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
           onClick={handleLogout}
           className={`flex items-center p-3 text-slate-200 hover:bg-slate-700 rounded-lg mb-1 transition-colors w-full`}
         >
-          <span className="text-xl"><FaSignOutAlt /></span>
+          <span className="text-xl">
+            <FaSignOutAlt />
+          </span>
           {!isCollapsed && (
             <span className="ml-3 text-sm font-medium whitespace-nowrap">
               Logout

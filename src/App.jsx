@@ -10,6 +10,7 @@ import MainLayout from "./layouts/MainLayout";
 import HomePage from "./pages/HomePage";
 import NotFoundPage from "./pages/NotFoundPage";
 import Dashboard from "./pages/Dashboard";
+import SimulationsPage from "./pages/SimulationsPage";
 import SimulationPage from "./pages/SimulationPage";
 import Login from "./components/Login";
 import AnalyticsPage from "./pages/AnalyticsPage";
@@ -25,7 +26,8 @@ const router = createBrowserRouter(
       <Route path="/login" element={<Login />} />
       <Route element={<MainLayout />}>
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/simulation" element={<SimulationPage />} />
+        <Route path="/simulations" element={<SimulationsPage />} />
+        <Route path="/simulations/split-system" element={<SimulationPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/training" element={<TrainingPage />} />
         <Route path="/tools" element={<Tools />} />

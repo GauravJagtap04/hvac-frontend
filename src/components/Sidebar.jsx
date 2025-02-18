@@ -88,14 +88,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
         <div className="border-t border-slate-700 my-4"></div>
 
         {/* Simulation Tools */}
-        {menuItem("/simulation", <FaCalculator />, "Simulation Tools")}
-        {!isCollapsed && activeSubmenu === "sims" && (
-          <div className="ml-4 space-y-1">
-            {menuItem("/cooling-sim", <FaTemperatureHigh />, "Cooling Systems")}
-            {menuItem("/heating-sim", <FaTemperatureHigh />, "Heating Systems")}
-            {menuItem("/ventilation-sim", <FaWind />, "Ventilation Design")}
-          </div>
-        )}
+        {menuItem("/simulations", <FaCalculator />, "Simulation Tools")}
 
         {/* Analysis Tools */}
         {menuItem("/analytics", <FaChartLine />, "Analytics")}

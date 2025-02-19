@@ -7,7 +7,7 @@ const initialState = {
     length: 5.0,
     breadth: 4.0,
     height: 3.0,
-    currentTemp: 25.0,
+    currentTemp: 10.0,
     targetTemp: 22.0,
     externalTemp: 35.0,
     wallInsulation: 0.5
@@ -29,7 +29,8 @@ const initialState = {
     cop: 3.0
   },
   isConnected: false,
-  isSimulationRunning: false
+  isSimulationRunning: false,
+  isSimulationPaused: false
 };
 
 const hvacSlice = createSlice({
@@ -50,6 +51,9 @@ const hvacSlice = createSlice({
     },
     setSimulationStatus: (state, action) => {
       state.isSimulationRunning = action.payload;
+    },
+    setSimulationPaused: (state, action) => {
+      state.isSimulationPaused = action.payload;
     }
   }
 });
@@ -59,7 +63,8 @@ export const {
   updateHVACParameters, 
   updateSystemStatus,
   setConnectionStatus,
-  setSimulationStatus
+  setSimulationStatus,
+  setSimulationPaused
 } = hvacSlice.actions;
 
 export const store = configureStore({

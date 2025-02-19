@@ -53,10 +53,23 @@ const SimulationPage = () => {
     systemStatus,
     isConnected,
     isSimulationRunning,
+    isSimulationPaused,
   } = useSelector((state) => state.hvac);
 
   const [temperatureData, setTemperatureData] = useState([]);
   const [ws, setWs] = useState(null);
+  const [estimatedTime, setEstimatedTime] = useState(0);
+  const [countdownTime, setCountdownTime] = useState(0);
+
+  useEffect(() => {
+    let timer;
+    if (isSimulationRunning && !isSimulationPaused && countdownTime > 0) {
+      timer = setInterval(() => {
+        setCountdownTime((prev) => Math.max(0, prev - 1));
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [isSimulationRunning, isSimulationPaused, countdownTime]);
 
   useEffect(() => {
     const websocket = new WebSocket("ws://localhost:8000/ws");
@@ -71,6 +84,9 @@ const SimulationPage = () => {
         const data = JSON.parse(event.data);
         if (data.type === "simulation_status") {
           dispatch(setSimulationStatus(data.data.isRunning));
+          dispatch(setSimulationPaused(data.data.isPaused));
+          setEstimatedTime(data.data.estimatedTimeToTarget);
+          setCountdownTime(data.data.estimatedTimeToTarget);
         } else if (data.system_status) {
           dispatch(
             updateSystemStatus({
@@ -126,30 +142,45 @@ const SimulationPage = () => {
   const StatusCard = ({ title, value, unit, icon }) => (
     <Paper
       sx={{
-        p: 2,
+        p: 3,
         height: "100%",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        background: alpha(theme.palette.primary.main, 0.1),
-        transition: "all 0.3s ease",
+        background: `linear-gradient(135deg, ${alpha(
+          theme.palette.primary.main,
+          0.05
+        )} 0%, ${alpha(theme.palette.primary.main, 0.15)} 100%)`,
+        backdropFilter: "blur(10px)",
+        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+        borderRadius: 2,
+        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
         "&:hover": {
-          transform: "translateY(-5px)",
-          boxShadow: theme.shadows[4],
+          transform: "translateY(-4px)",
+          boxShadow: `0 8px 24px -4px ${alpha(
+            theme.palette.primary.main,
+            0.2
+          )}`,
+          border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
         },
       }}
     >
       {icon}
-      <Typography variant="h6" sx={{ mt: 1 }}>
+      <Typography variant="h6" sx={{ mt: 2, color: "text.secondary" }}>
         {title}
       </Typography>
       <Typography
-        variant="h4"
-        sx={{ mt: 1, color: theme.palette.primary.main }}
+        variant="h3"
+        sx={{
+          mt: 2,
+          mb: 1,
+          color: theme.palette.primary.main,
+          fontWeight: "bold",
+        }}
       >
         {value}
       </Typography>
-      <Typography variant="body2" color="textSecondary">
+      <Typography variant="body1" sx={{ color: "text.secondary" }}>
         {unit}
       </Typography>
     </Paper>
@@ -158,28 +189,43 @@ const SimulationPage = () => {
   return (
     <Box
       sx={{
-        p: 3,
+        p: 4,
         minHeight: "100vh",
-        background: theme.palette.background.default,
+        background: `linear-gradient(135deg, ${
+          theme.palette.background.default
+        } 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`,
       }}
     >
-      <Grid container spacing={3}>
+      <Grid container spacing={4}>
         <Grid item xs={12}>
           <Box
             sx={{
-              mb: 3,
+              mb: 4,
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
             }}
           >
-            <Typography variant="h4" sx={{ color: theme.palette.primary.main }}>
+            <Typography
+              variant="h3"
+              sx={{
+                color: theme.palette.primary.main,
+                fontWeight: "bold",
+                letterSpacing: "-0.5px",
+              }}
+            >
               HVAC Simulation Dashboard
             </Typography>
             <Chip
               label={isConnected ? "Connected" : "Disconnected"}
               color={isConnected ? "success" : "error"}
-              sx={{ fontSize: "1rem", py: 2 }}
+              sx={{
+                fontSize: "1rem",
+                py: 2.5,
+                px: 3,
+                borderRadius: 2,
+                "& .MuiChip-label": { fontWeight: 500 },
+              }}
             />
           </Box>
         </Grid>
@@ -191,7 +237,7 @@ const SimulationPage = () => {
             unit="°C"
             icon={
               <ThermostatAuto
-                sx={{ fontSize: 40, color: theme.palette.primary.main }}
+                sx={{ fontSize: 48, color: theme.palette.primary.main }}
               />
             }
           />
@@ -203,7 +249,7 @@ const SimulationPage = () => {
             value={(systemStatus.energyConsumptionW / 1000).toFixed(2)}
             unit="kW"
             icon={
-              <Power sx={{ fontSize: 40, color: theme.palette.primary.main }} />
+              <Power sx={{ fontSize: 48, color: theme.palette.primary.main }} />
             }
           />
         </Grid>
@@ -214,7 +260,7 @@ const SimulationPage = () => {
             value={systemStatus.cop.toFixed(2)}
             unit=""
             icon={
-              <Speed sx={{ fontSize: 40, color: theme.palette.primary.main }} />
+              <Speed sx={{ fontSize: 48, color: theme.palette.primary.main }} />
             }
           />
         </Grid>
@@ -226,37 +272,73 @@ const SimulationPage = () => {
             unit="g/s"
             icon={
               <Opacity
-                sx={{ fontSize: 40, color: theme.palette.primary.main }}
+                sx={{ fontSize: 48, color: theme.palette.primary.main }}
               />
             }
           />
         </Grid>
 
         <Grid item xs={12}>
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
+          <Paper
+            sx={{
+              p: 4,
+              mb: 4,
+              background: alpha(theme.palette.background.paper, 0.8),
+              backdropFilter: "blur(10px)",
+              borderRadius: 2,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+            }}
+          >
+            <Typography
+              variant="h5"
+              gutterBottom
+              sx={{ color: theme.palette.primary.main, fontWeight: "bold" }}
+            >
               Temperature History
             </Typography>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={400}>
               <LineChart data={temperatureData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="time" />
-                <YAxis />
-                <Tooltip />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke={alpha(theme.palette.text.primary, 0.1)}
+                />
+                <XAxis
+                  dataKey="time"
+                  stroke={theme.palette.text.secondary}
+                  tick={{ fill: theme.palette.text.secondary }}
+                />
+                <YAxis
+                  stroke={theme.palette.text.secondary}
+                  tick={{ fill: theme.palette.text.secondary }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: alpha(theme.palette.background.paper, 0.9),
+                    border: `1px solid ${alpha(
+                      theme.palette.primary.main,
+                      0.1
+                    )}`,
+                    borderRadius: 8,
+                  }}
+                />
                 <Legend />
                 <Line
                   type="monotone"
                   dataKey="temperature"
                   stroke={theme.palette.primary.main}
                   name="Room Temperature"
-                  strokeWidth={2}
+                  strokeWidth={3}
+                  dot={false}
+                  activeDot={{ r: 8 }}
                 />
                 <Line
                   type="monotone"
                   dataKey="target"
                   stroke={theme.palette.secondary.main}
                   name="Target Temperature"
+                  strokeWidth={2}
                   strokeDasharray="5 5"
+                  dot={false}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -266,19 +348,26 @@ const SimulationPage = () => {
         <Grid item xs={12} md={6}>
           <Paper
             sx={{
-              p: 3,
+              p: 4,
+              height: "100%",
               background: alpha(theme.palette.background.paper, 0.8),
               backdropFilter: "blur(10px)",
+              borderRadius: 2,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
             }}
           >
             <Typography
-              variant="h6"
+              variant="h5"
               gutterBottom
-              sx={{ color: theme.palette.primary.main }}
+              sx={{
+                color: theme.palette.primary.main,
+                fontWeight: "bold",
+                mb: 3,
+              }}
             >
               Room Parameters
             </Typography>
-            <Grid container spacing={3}>
+            <Grid container spacing={4}>
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -292,6 +381,16 @@ const SimulationPage = () => {
                     )
                   }
                   inputProps={{ step: 0.1, min: 1 }}
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      "& fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.2),
+                      },
+                      "&:hover fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.3),
+                      },
+                    },
+                  }}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -307,6 +406,21 @@ const SimulationPage = () => {
                     )
                   }
                   inputProps={{ step: 0.1, min: 1 }}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Current Room Temperature: {roomParameters.currentTemp}°C
+                </Typography>
+                <Slider
+                  value={roomParameters.currentTemp}
+                  onChange={handleRoomParameterChange("currentTemp")}
+                  min={10}
+                  max={40}
+                  step={0.5}
+                  marks
+                  valueLabelDisplay="auto"
                 />
               </Grid>
 
@@ -361,19 +475,26 @@ const SimulationPage = () => {
         <Grid item xs={12} md={6}>
           <Paper
             sx={{
-              p: 3,
+              p: 4,
+              height: "100%",
               background: alpha(theme.palette.background.paper, 0.8),
               backdropFilter: "blur(10px)",
+              borderRadius: 2,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
             }}
           >
             <Typography
-              variant="h6"
+              variant="h5"
               gutterBottom
-              sx={{ color: theme.palette.primary.main }}
+              sx={{
+                color: theme.palette.primary.main,
+                fontWeight: "bold",
+                mb: 3,
+              }}
             >
               HVAC Parameters
             </Typography>
-            <Grid container spacing={3}>
+            <Grid container spacing={4}>
               <Grid item xs={12}>
                 <Typography gutterBottom>
                   Power: {hvacParameters.power} kW
@@ -425,34 +546,101 @@ const SimulationPage = () => {
         <Grid item xs={12}>
           <Paper
             sx={{
-              p: 3,
+              p: 4,
               display: "flex",
               justifyContent: "center",
               alignItems: "center",
               background: alpha(theme.palette.background.paper, 0.8),
               backdropFilter: "blur(10px)",
+              borderRadius: 2,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
             }}
           >
-            <Button
-              variant="contained"
-              size="large"
-              color={isSimulationRunning ? "error" : "primary"}
-              startIcon={
-                isSimulationRunning ? (
-                  <CircularProgress size={20} color="inherit" />
-                ) : null
-              }
-              onClick={() => {
-                const message = {
-                  type: "simulation_control",
-                  data: { action: isSimulationRunning ? "stop" : "start" },
-                };
-                ws?.send(JSON.stringify(message));
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 2,
               }}
-              sx={{ px: 4, py: 1.5, fontSize: "1.1rem" }}
             >
-              {isSimulationRunning ? "Stop" : "Start"} Simulation
-            </Button>
+              <Button
+                variant="contained"
+                size="large"
+                color={isSimulationRunning ? "error" : "primary"}
+                startIcon={
+                  isSimulationRunning && !isSimulationPaused ? (
+                    <CircularProgress size={24} color="inherit" />
+                  ) : null
+                }
+                onClick={() => {
+                  const message = {
+                    type: "simulation_control",
+                    data: {
+                      action: isSimulationRunning
+                        ? isSimulationPaused
+                          ? "resume"
+                          : "pause"
+                        : "start",
+                    },
+                  };
+                  ws?.send(JSON.stringify(message));
+                  if (isSimulationRunning) {
+                    dispatch(setSimulationPaused(!isSimulationPaused));
+                  }
+                }}
+                sx={{
+                  px: 6,
+                  py: 2,
+                  fontSize: "1.2rem",
+                  fontWeight: "bold",
+                  borderRadius: 2,
+                  textTransform: "none",
+                  boxShadow: isSimulationRunning
+                    ? `0 0 20px ${alpha(theme.palette.error.main, 0.4)}`
+                    : `0 0 20px ${alpha(theme.palette.primary.main, 0.4)}`,
+                }}
+              >
+                {isSimulationRunning
+                  ? isSimulationPaused
+                    ? "Resume Simulation"
+                    : "Pause Simulation"
+                  : "Start Simulation"}
+              </Button>
+              {countdownTime > 0 && (
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    p: 2,
+                    borderRadius: 2,
+                    bgcolor: alpha(theme.palette.background.paper, 0.8),
+                    border: `1px solid ${alpha(
+                      theme.palette.primary.main,
+                      0.1
+                    )}`,
+                  }}
+                >
+                  <Typography
+                    variant="h6"
+                    sx={{ color: theme.palette.text.secondary }}
+                  >
+                    Time to Target:
+                  </Typography>
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      color: theme.palette.primary.main,
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {Math.floor(countdownTime / 60)}:
+                    {String(countdownTime % 60).padStart(2, "0")}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
           </Paper>
         </Grid>
       </Grid>

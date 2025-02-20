@@ -1,178 +1,334 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
+import { supabase } from "../components/SupabaseClient";
+import { motion } from "framer-motion";
+import { FaSearch, FaSpinner, FaChevronDown } from "react-icons/fa";
 
 const TrainingPage = () => {
   const { isCollapsed } = useOutletContext();
-  const [activeModule, setActiveModule] = useState(0);
+  const [activeTab, setActiveTab] = useState("modules");
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [trainingModules, setTrainingModules] = useState([]);
+  const [quizzes, setQuizzes] = useState([]);
+  const [currentQuiz, setCurrentQuiz] = useState(null);
+  const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [showResult, setShowResult] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [score, setScore] = useState(0);
+  const [quizCompleted, setQuizCompleted] = useState(false);
+  useEffect(() => {
+    if (activeTab === "modules") {
+      fetchTrainingModules();
+    } else if (activeTab === "quizzes") {
+      fetchQuizzes();
+    }
+  }, [activeCategory, activeTab]);
+  const fetchTrainingModules = async () => {
+    try {
+      setLoading(true);
+      let query = supabase.from("training_modules").select("*");
 
-  const modules = [
-    {
-      id: 1,
-      title: "HVAC Fundamentals",
-      duration: "2 hours",
-      progress: 80,
-      lessons: ["Basic Principles", "System Components", "Control Systems"],
-    },
-    {
-      id: 2,
-      title: "Energy Efficiency",
-      duration: "1.5 hours",
-      progress: 60,
-      lessons: ["Energy Basics", "Optimization Techniques", "Case Studies"],
-    },
-    {
-      id: 3,
-      title: "Maintenance & Troubleshooting",
-      duration: "3 hours",
-      progress: 30,
-      lessons: ["Preventive Maintenance", "Common Issues", "Solutions"],
-    },
+      if (activeCategory !== "all") {
+        query = query.eq("category", activeCategory);
+      }
+
+      const { data, error } = await query.order("created_at", {
+        ascending: false,
+      });
+
+      if (error) throw error;
+      setTrainingModules(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const fetchQuizzes = async () => {
+    try {
+      setLoading(true);
+      let query = supabase.from("quizzes").select("*, training_modules(title)");
+
+      if (activeCategory !== "all") {
+        query = query.eq("training_modules.category", activeCategory);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      setQuizzes(data);
+      setCurrentQuiz(data[0] || null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const handleAnswerSubmit = () => {
+    const isCorrect = selectedAnswer === currentQuiz.correct_answer;
+    if (isCorrect) {
+      setScore((prevScore) => prevScore + 1);
+    }
+    setShowResult(true);
+  };
+  const handleNextQuiz = () => {
+    const currentIndex = quizzes.findIndex((q) => q.id === currentQuiz.id);
+    if (currentIndex < quizzes.length - 1) {
+      setCurrentQuiz(quizzes[currentIndex + 1]);
+      setSelectedAnswer(null);
+      setShowResult(false);
+    } else {
+      setQuizCompleted(true);
+    }
+  };
+
+  const handleRestartQuiz = () => {
+    setCurrentQuiz(quizzes[0]);
+    setSelectedAnswer(null);
+    setShowResult(false);
+    setScore(0);
+    setQuizCompleted(false);
+  };
+  const categories = [
+    { id: "all", label: "All Modules" },
+    { id: "basics", label: "HVAC Basics" },
+    { id: "components", label: "Components" },
+    { id: "troubleshooting", label: "Troubleshooting" },
   ];
-
+  const filteredModules = trainingModules.filter((module) =>
+    module.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-red-600 text-center">
+          <h2 className="text-2xl font-bold mb-2">Error Loading Content</h2>
+          <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
+      <header className="bg-white shadow-sm sticky top-0 z-10">
         <div
           className={`transition-all duration-300 ${
             isCollapsed ? "max-w-8xl" : "max-w-7xl"
           } mx-auto px-4 sm:px-6 lg:px-8 py-4`}
         >
-          <h1 className="text-2xl font-semibold text-gray-900">
-            HVAC Training Portal
-          </h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-semibold text-gray-900">
+              HVAC Training Portal
+            </h1>
+            <div className="flex items-center space-x-4">
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setActiveTab("modules")}
+                  className={`px-4 py-2 rounded-lg ${
+                    activeTab === "modules"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  Modules
+                </button>
+                <button
+                  onClick={() => setActiveTab("quizzes")}
+                  className={`px-4 py-2 rounded-lg ${
+                    activeTab === "quizzes"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  Quizzes
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <FaSearch className="absolute left-3 top-3 text-gray-400" />
+              </div>
+            </div>
+          </div>
         </div>
       </header>
-
-      {/* Main Content */}
+      {activeTab === "modules" && (
+        <div className="bg-white border-b">
+          <div
+            className={`transition-all duration-300 ${
+              isCollapsed ? "max-w-8xl" : "max-w-7xl"
+            } mx-auto px-4 sm:px-6 lg:px-8`}
+          >
+            <nav className="-mb-px flex space-x-8" aria-label="Categories">
+              {categories.map((category) => (
+                <button
+                  key={category.id}
+                  onClick={() => {
+                    setActiveCategory(category.id);
+                    setSearchQuery("");
+                  }}
+                  className={`${
+                    activeCategory === category.id
+                      ? "border-blue-500 text-blue-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                >
+                  {category.label}
+                </button>
+              ))}
+            </nav>
+          </div>
+        </div>
+      )}
       <main
         className={`transition-all duration-300 ${
           isCollapsed ? "max-w-8xl" : "max-w-7xl"
         } mx-auto px-4 sm:px-6 lg:px-8 py-8`}
       >
-        <div className="grid grid-cols-12 gap-6">
-          {/* Left Sidebar - Module List */}
-          <div className="col-span-12 lg:col-span-4">
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">
-                Training Modules
-              </h2>
-              <div className="space-y-4">
-                {modules.map((module, index) => (
-                  <div
-                    key={module.id}
-                    onClick={() => setActiveModule(index)}
-                    className={`p-4 rounded-lg cursor-pointer transition-all ${
-                      activeModule === index
-                        ? "bg-blue-50 border-2 border-blue-200"
-                        : "bg-gray-50 hover:bg-gray-100"
-                    }`}
-                  >
-                    <div className="flex justify-between items-center mb-2">
-                      <h3 className="font-medium text-gray-900">
-                        {module.title}
-                      </h3>
-                      <span className="text-sm text-gray-500">
-                        {module.duration}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full"
-                        style={{ width: `${module.progress}%` }}
-                      ></div>
-                    </div>
-                    <div className="mt-2 text-sm text-gray-600">
-                      {module.progress}% Complete
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <FaSpinner className="animate-spin text-4xl text-blue-500" />
+          </div>
+        ) : activeTab === "modules" ? (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+          >
+            {filteredModules.map((module) => (
+              <div
+                key={module.id}
+                className="bg-white shadow-lg rounded-xl p-6 hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
+              >
+                <div className="flex flex-col h-full">
+                  <div className="flex items-start justify-between mb-4">
+                    <h3 className="text-xl font-semibold text-gray-900">
+                      {module.title}
+                    </h3>
+                    <span className="px-3 py-1 text-xs font-medium text-blue-600 bg-blue-100 rounded-full">
+                      {module.category}
+                    </span>
+                  </div>
+                  <div className="flex-grow">
+                    <div className="prose prose-sm max-w-none text-gray-600 mb-6">
+                      {module.content}
                     </div>
                   </div>
-                ))}
+                  <a
+                    href={module.media_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-auto w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transform hover:scale-[1.02] transition-all duration-200 text-center font-medium shadow-md hover:shadow-lg"
+                  >
+                    Start Learning
+                  </a>
+                </div>
               </div>
-            </div>
-          </div>
+            ))}
+            {filteredModules.length === 0 && (
+              <div className="col-span-full text-center py-8 text-gray-500">
+                {searchQuery
+                  ? "No modules match your search"
+                  : "No modules available in this category"}
+              </div>
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="max-w-3xl mx-auto"
+          >
+            {currentQuiz && !quizCompleted ? (
+              <div className="bg-white shadow-lg rounded-xl p-8">
+                <div className="mb-8">
+                  <h3 className="text-2xl font-semibold text-gray-900 mb-2">
+                    {currentQuiz.question}
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    From module: {currentQuiz.training_modules?.title}
+                  </p>
+                </div>
 
-          {/* Main Content Area */}
-          <div className="col-span-12 lg:col-span-8 space-y-6">
-            {/* Module Content */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-medium text-gray-900">
-                  {modules[activeModule].title}
-                </h2>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                  Continue Learning
+                <div className="space-y-4 mb-8">
+                  {currentQuiz.options.map((option, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setSelectedAnswer(option)}
+                      disabled={showResult}
+                      className={`w-full p-4 text-left rounded-lg border ${
+                        showResult
+                          ? option === currentQuiz.correct_answer
+                            ? "bg-green-100 border-green-500"
+                            : option === selectedAnswer
+                            ? "bg-red-100 border-red-500"
+                            : "bg-gray-50 border-gray-200"
+                          : selectedAnswer === option
+                          ? "bg-blue-50 border-blue-500"
+                          : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex justify-between items-center">
+                  {!showResult ? (
+                    <button
+                      onClick={handleAnswerSubmit}
+                      disabled={!selectedAnswer}
+                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Submit Answer
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleNextQuiz}
+                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      Next Question
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : quizCompleted ? (
+              <div className="bg-white shadow-lg rounded-xl p-8 text-center">
+                <h3 className="text-2xl font-semibold text-gray-900 mb-4">
+                  Quiz Completed!
+                </h3>
+                <div className="text-4xl font-bold text-blue-600 mb-2">
+                  {score} / {quizzes.length}
+                </div>
+                <div className="text-lg text-gray-600 mb-6">
+                  You scored {Math.round((score / quizzes.length) * 100)}%
+                </div>
+                <button
+                  onClick={handleRestartQuiz}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Restart Quiz
                 </button>
               </div>
-
-              <div className="space-y-6">
-                {modules[activeModule].lessons.map((lesson, index) => (
-                  <div
-                    key={index}
-                    className="p-4 border border-gray-200 rounded-lg hover:border-blue-200 transition-colors"
-                  >
-                    <div className="flex items-center space-x-4">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-medium">
-                        {index + 1}
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-medium text-gray-900">
-                          {lesson}
-                        </h3>
-                        <p className="text-sm text-gray-500">
-                          Learn about the core concepts and practical
-                          applications
-                        </p>
-                      </div>
-                      <button className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50">
-                        Start
-                      </button>
-                    </div>
-                  </div>
-                ))}
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                No quizzes available in this category
               </div>
-            </div>
-
-            {/* Resources Section */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">
-                Additional Resources
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <ResourceCard
-                  icon="📚"
-                  title="Documentation"
-                  description="Access comprehensive guides and manuals"
-                />
-                <ResourceCard
-                  icon="🎥"
-                  title="Video Tutorials"
-                  description="Watch step-by-step video instructions"
-                />
-                <ResourceCard
-                  icon="💡"
-                  title="Best Practices"
-                  description="Learn industry-standard approaches"
-                />
-                <ResourceCard
-                  icon="🔧"
-                  title="Tools & Templates"
-                  description="Download useful resources and tools"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+            )}
+          </motion.div>
+        )}
       </main>
     </div>
   );
 };
-
-const ResourceCard = ({ icon, title, description }) => (
-  <div className="p-4 border border-gray-200 rounded-lg hover:border-blue-200 transition-colors">
-    <div className="text-2xl mb-2">{icon}</div>
-    <h3 className="font-medium text-gray-900">{title}</h3>
-    <p className="text-sm text-gray-500">{description}</p>
-  </div>
-);
 
 export default TrainingPage;

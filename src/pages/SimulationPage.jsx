@@ -41,6 +41,8 @@ import {
   updateHVACParameters,
   updateSystemStatus,
   setConnectionStatus,
+  setSimulationStatus,
+  setSimulationPaused,
 } from "../store/store";
 import { Link } from "react-router-dom";
 
@@ -406,7 +408,139 @@ const SimulationPage = () => {
                     )
                   }
                   inputProps={{ step: 0.1, min: 1 }}
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      "& fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.2),
+                      },
+                      "&:hover fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.3),
+                      },
+                    },
+                  }}
                 />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Height (m)"
+                  type="number"
+                  value={roomParameters.height}
+                  onChange={(e) =>
+                    handleRoomParameterChange("height")(
+                      e,
+                      parseFloat(e.target.value)
+                    )
+                  }
+                  inputProps={{ step: 0.1, min: 1 }}
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      "& fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.2),
+                      },
+                      "&:hover fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.3),
+                      },
+                    },
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="No. of People"
+                  type="number"
+                  value={roomParameters.numPeople}
+                  onChange={(e) =>
+                    handleRoomParameterChange("numPeople")(
+                      e,
+                      parseFloat(e.target.value)
+                    )
+                  }
+                  inputProps={{ step: 1, min: 0 }}
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      "& fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.2),
+                      },
+                      "&:hover fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.3),
+                      },
+                    },
+                  }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <FormControl
+                  fullWidth
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      "& fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.2),
+                      },
+                      "&:hover fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.3),
+                      },
+                    },
+                  }}
+                >
+                  <InputLabel
+                    sx={{
+                      backgroundColor: theme.palette.background.paper,
+                      padding: "0 6px",
+                    }}
+                  >
+                    Mode
+                  </InputLabel>
+                  <Select
+                    value={roomParameters.mode}
+                    onChange={(e) =>
+                      handleRoomParameterChange("mode")(e, e.target.value)
+                    }
+                  >
+                    <MenuItem value="cooling">Cooling</MenuItem>
+                    <MenuItem value="heating">Heating</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl
+                  fullWidth
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      "& fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.2),
+                      },
+                      "&:hover fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.3),
+                      },
+                    },
+                  }}
+                >
+                  <InputLabel
+                    sx={{
+                      backgroundColor: theme.palette.background.paper,
+                      padding: "0 6px",
+                    }}
+                  >
+                    Wall Insulation Level
+                  </InputLabel>
+                  <Select
+                    value={roomParameters.wallInsulation}
+                    onChange={(e) =>
+                      handleRoomParameterChange("wallInsulation")(
+                        e,
+                        e.target.value
+                      )
+                    }
+                  >
+                    <MenuItem value="low">Low</MenuItem>
+                    <MenuItem value="medium">Medium</MenuItem>
+                    <MenuItem value="high">High</MenuItem>
+                  </Select>
+                </FormControl>
               </Grid>
 
               <Grid item xs={12}>
@@ -437,21 +571,6 @@ const SimulationPage = () => {
                   marks
                   valueLabelDisplay="auto"
                 />
-              </Grid>
-
-              <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel>Mode</InputLabel>
-                  <Select
-                    value={roomParameters.mode}
-                    onChange={(e) =>
-                      handleRoomParameterChange("mode")(e, e.target.value)
-                    }
-                  >
-                    <MenuItem value="cooling">Cooling</MenuItem>
-                    <MenuItem value="heating">Heating</MenuItem>
-                  </Select>
-                </FormControl>
               </Grid>
 
               <Grid item xs={12}>

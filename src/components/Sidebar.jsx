@@ -122,21 +122,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
         </button>
       </div>
 
-      {!isCollapsed && (
-        <div className="fixed bottom-4 left-0 right-0 px-3 max-w-[16rem]">
-          <div className="bg-slate-950/50 backdrop-blur-sm rounded-lg p-3 text-xs text-slate-300 shadow-lg">
-            <div className="font-semibold mb-1">System Status</div>
-            <div className="flex justify-between">
-              <span>CPU Usage:</span>
-              <span>45%</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Memory:</span>
-              <span>2.4GB</span>
-            </div>
-          </div>
-        </div>
-      )}
+      
     </div>
   );
 };

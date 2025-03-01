@@ -1,6 +1,6 @@
-import { configureStore } from '@reduxjs/toolkit';
-import { createSlice } from '@reduxjs/toolkit';
-import authReducer from './slices/authSlice';
+import { configureStore } from "@reduxjs/toolkit";
+import { createSlice } from "@reduxjs/toolkit";
+import authReducer from "./slices/authSlice";
 
 const initialState = {
   roomParameters: {
@@ -10,13 +10,15 @@ const initialState = {
     currentTemp: 10.0,
     targetTemp: 22.0,
     externalTemp: 35.0,
-    wallInsulation: 0.5
+    wallInsulation: "medium",
+    numPeople: 0,
+    mode: "cooling",
   },
   hvacParameters: {
     power: 3.5,
     cop: 3.0,
     airFlowRate: 0.5,
-    supplyTemp: 12.0
+    supplyTemp: 12.0,
   },
   systemStatus: {
     roomTemperature: 25.0,
@@ -26,15 +28,15 @@ const initialState = {
     energyConsumptionW: 0,
     refrigerantFlowGs: 0,
     heatGainW: 0,
-    cop: 3.0
+    cop: 3.0,
   },
   isConnected: false,
   isSimulationRunning: false,
-  isSimulationPaused: false
+  isSimulationPaused: false,
 };
 
 const hvacSlice = createSlice({
-  name: 'hvac',
+  name: "hvac",
   initialState,
   reducers: {
     updateRoomParameters: (state, action) => {
@@ -54,22 +56,22 @@ const hvacSlice = createSlice({
     },
     setSimulationPaused: (state, action) => {
       state.isSimulationPaused = action.payload;
-    }
-  }
+    },
+  },
 });
 
-export const { 
-  updateRoomParameters, 
-  updateHVACParameters, 
+export const {
+  updateRoomParameters,
+  updateHVACParameters,
   updateSystemStatus,
   setConnectionStatus,
   setSimulationStatus,
-  setSimulationPaused
+  setSimulationPaused,
 } = hvacSlice.actions;
 
 export const store = configureStore({
   reducer: {
     hvac: hvacSlice.reducer,
-    auth: authReducer
-  }
+    auth: authReducer,
+  },
 });

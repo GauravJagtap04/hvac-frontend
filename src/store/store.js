@@ -18,7 +18,7 @@ const initialState = {
     power: 3.5,
     cop: 3.0,
     airFlowRate: 0.5,
-    supplyTemp: 12.0,
+    fanSpeed: 0.0,
   },
   systemStatus: {
     roomTemperature: 25.0,

@@ -335,7 +335,7 @@ const SimulationPage = () => {
                 />
                 <Line
                   type="monotone"
-                  dataKey="target"
+                  dataKey={(dataPoint) => roomParameters.targetTemp}
                   stroke={theme.palette.secondary.main}
                   name="Target Temperature"
                   strokeWidth={2}
@@ -678,54 +678,89 @@ const SimulationPage = () => {
             <Box
               sx={{
                 display: "flex",
-                flexDirection: "column",
                 alignItems: "center",
+                flexDirection: "column",
                 gap: 2,
               }}
             >
-              <Button
-                variant="contained"
-                size="large"
-                color={isSimulationRunning ? "error" : "primary"}
-                startIcon={
-                  isSimulationRunning && !isSimulationPaused ? (
-                    <CircularProgress size={24} color="inherit" />
-                  ) : null
-                }
-                onClick={() => {
-                  const message = {
-                    type: "simulation_control",
-                    data: {
-                      action: isSimulationRunning
-                        ? isSimulationPaused
-                          ? "resume"
-                          : "pause"
-                        : "start",
-                    },
-                  };
-                  ws?.send(JSON.stringify(message));
-                  if (isSimulationRunning) {
-                    dispatch(setSimulationPaused(!isSimulationPaused));
+              <Grid item xs={12} container>
+                <Button
+                  variant="contained"
+                  size="large"
+                  color={isSimulationRunning ? "error" : "primary"}
+                  startIcon={
+                    isSimulationRunning && !isSimulationPaused ? (
+                      <CircularProgress size={24} color="inherit" />
+                    ) : null
                   }
-                }}
-                sx={{
-                  px: 6,
-                  py: 2,
-                  fontSize: "1.2rem",
-                  fontWeight: "bold",
-                  borderRadius: 2,
-                  textTransform: "none",
-                  boxShadow: isSimulationRunning
-                    ? `0 0 20px ${alpha(theme.palette.error.main, 0.4)}`
-                    : `0 0 20px ${alpha(theme.palette.primary.main, 0.4)}`,
-                }}
-              >
-                {isSimulationRunning
-                  ? isSimulationPaused
-                    ? "Resume Simulation"
-                    : "Pause Simulation"
-                  : "Start Simulation"}
-              </Button>
+                  onClick={() => {
+                    const message = {
+                      type: "simulation_control",
+                      data: {
+                        action: isSimulationRunning
+                          ? isSimulationPaused
+                            ? "resume"
+                            : "pause"
+                          : "start",
+                      },
+                    };
+                    ws?.send(JSON.stringify(message));
+                    if (isSimulationRunning) {
+                      dispatch(setSimulationPaused(!isSimulationPaused));
+                    }
+                  }}
+                  sx={{
+                    px: 6,
+                    py: 2,
+                    fontSize: "1.2rem",
+                    fontWeight: "bold",
+                    borderRadius: 2,
+                    textTransform: "none",
+                    boxShadow: isSimulationRunning
+                      ? `0 0 20px ${alpha(theme.palette.error.main, 0.4)}`
+                      : `0 0 20px ${alpha(theme.palette.primary.main, 0.4)}`,
+                  }}
+                >
+                  {isSimulationRunning
+                    ? isSimulationPaused
+                      ? "Resume Simulation"
+                      : "Pause Simulation"
+                    : "Start Simulation"}
+                </Button>
+                {isSimulationRunning ? (
+                  <Button
+                    variant="contained"
+                    size="large"
+                    color="error"
+                    onClick={() => {
+                      const message = {
+                        type: "simulation_control",
+                        data: {
+                          action: "stop",
+                        },
+                      };
+                      ws?.send(JSON.stringify(message));
+                    }}
+                    sx={{
+                      px: 6,
+                      py: 2,
+                      fontSize: "1.2rem",
+                      fontWeight: "bold",
+                      borderRadius: 2,
+                      textTransform: "none",
+                      marginLeft: 2, // Add margin-left for spacing
+                      boxShadow: `0 0 20px ${alpha(
+                        theme.palette.error.main,
+                        0.4
+                      )}`,
+                    }}
+                  >
+                    Stop Simulation
+                  </Button>
+                ) : (
+                  ""
+                )}
+              </Grid>
               {countdownTime > 0 && (
                 <Box
                   sx={{
@@ -755,7 +790,7 @@ const SimulationPage = () => {
                     }}
                   >
                     {Math.floor(countdownTime / 60)}:
-                    {String(countdownTime % 60).padStart(2, "0")}
+                    {String(Math.floor(countdownTime % 60)).padStart(2, "0")}
                   </Typography>
                 </Box>
               )}

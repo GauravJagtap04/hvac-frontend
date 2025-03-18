@@ -2,6 +2,7 @@ import { configureStore } from "@reduxjs/toolkit";
 import { createSlice } from "@reduxjs/toolkit";
 import authReducer from "./slices/authSlice";
 
+// Only split system parameters exists. Add parameters for other systems
 const initialState = {
   roomParameters: {
     length: 5.0,

@@ -74,11 +74,13 @@ const SimulationPage = () => {
   }, [isSimulationRunning, isSimulationPaused, countdownTime]);
 
   useEffect(() => {
-    const websocket = new WebSocket("ws://localhost:8000/ws");
+    const websocket = new WebSocket(
+      "ws://localhost:8000/ws?system_type=vrf-system&client_id=vrf_system_client"
+    );
 
     websocket.onopen = () => {
       dispatch(setConnectionStatus(true));
-      console.log("Connected to HVAC simulator");
+      console.log("Connected to VRF system simulator");
     };
 
     websocket.onmessage = (event) => {
@@ -119,7 +121,7 @@ const SimulationPage = () => {
 
     websocket.onclose = () => {
       dispatch(setConnectionStatus(false));
-      console.log("Disconnected from HVAC simulator");
+      console.log("Disconnected from VRF system simulator");
     };
 
     setWs(websocket);
@@ -216,7 +218,7 @@ const SimulationPage = () => {
                 letterSpacing: "-0.5px",
               }}
             >
-              HVAC Simulation Dashboard
+              Variable Refrigerant Flow (VRF) System Simulation Dashboard
             </Typography>
             <Chip
               label={isConnected ? "Connected" : "Disconnected"}

@@ -1,4 +1,12 @@
-import { Box, Card, CardContent, Typography, Grid, Container, useTheme } from "@mui/material";
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  Grid,
+  Container,
+  useTheme,
+} from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 
@@ -10,35 +18,37 @@ const SimulationsPage = () => {
     {
       id: "split-system",
       title: "Split System HVAC",
-      description: "Simulate and analyze split system HVAC performance and efficiency",
+      description:
+        "Simulate and analyze split system HVAC performance and efficiency",
       icon: "🌡️",
       path: "/simulations/split-system",
-      color: "#4CAF50"
+      color: "#4CAF50",
     },
     {
-      id: "central-air",
-      title: "Central Air System",
-      description: "Advanced simulation for central air conditioning systems",
+      id: "variable-refrigerant-flow",
+      title: "Variable Refrigerant Flow",
+      description: "VRF system simulation and analysis for energy efficiency",
       icon: "❄️",
-      path: "/simulations/central-air",
-      color: "#2196F3"
+      path: "/simulations/variable-refrigerant-flow",
+      color: "#2196F3",
     },
     {
-      id: "heat-pump",
+      id: "heat-pump-system",
       title: "Heat Pump System",
       description: "Comprehensive heat pump system simulation and analysis",
       icon: "♨️",
-      path: "/simulations/heat-pump",
-      color: "#FF5722"
+      path: "/simulations/heat-pump-system",
+      color: "#FF5722",
     },
     {
-      id: "ventilation",
-      title: "Ventilation System",
-      description: "Simulate airflow and ventilation system performance",
-      icon: "💨",
-      path: "/simulations/ventilation",
-      color: "#9C27B0"
-    }
+      id: "chilled-water-system",
+      title: "Chilled Water System",
+      description:
+        "Chilled water system simulation and analysis for HVAC design",
+      icon: "💧",
+      path: "/simulations/chilled-water-system",
+      color: "#9C27B0",
+    },
   ];
 
   return (
@@ -46,7 +56,7 @@ const SimulationsPage = () => {
       sx={{
         minHeight: "100vh",
         background: `linear-gradient(135deg, ${theme.palette.background.default} 0%, ${theme.palette.background.paper} 100%)`,
-        py: 6
+        py: 6,
       }}
     >
       <Container maxWidth="xl">
@@ -63,7 +73,7 @@ const SimulationsPage = () => {
               background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
-              textAlign: "center"
+              textAlign: "center",
             }}
           >
             HVAC Simulations
@@ -80,9 +90,9 @@ const SimulationsPage = () => {
               >
                 <Card
                   component={motion.div}
-                  whileHover={{ 
+                  whileHover={{
                     scale: 1.03,
-                    boxShadow: theme.shadows[10]
+                    boxShadow: theme.shadows[10],
                   }}
                   whileTap={{ scale: 0.98 }}
                   sx={{
@@ -102,8 +112,8 @@ const SimulationsPage = () => {
                       left: 0,
                       width: "100%",
                       height: 4,
-                      background: simulation.color
-                    }
+                      background: simulation.color,
+                    },
                   }}
                   onClick={() => navigate(simulation.path)}
                 >
@@ -128,7 +138,7 @@ const SimulationsPage = () => {
                       sx={{
                         fontWeight: 600,
                         color: theme.palette.text.primary,
-                        mb: 2
+                        mb: 2,
                       }}
                     >
                       {simulation.title}
@@ -137,7 +147,7 @@ const SimulationsPage = () => {
                       variant="body2"
                       sx={{
                         color: theme.palette.text.secondary,
-                        lineHeight: 1.6
+                        lineHeight: 1.6,
                       }}
                     >
                       {simulation.description}
@@ -146,7 +156,7 @@ const SimulationsPage = () => {
                 </Card>
               </motion.div>
             </Grid>
-          ))}      
+          ))}
         </Grid>
       </Container>
     </Box>

@@ -68,25 +68,10 @@ const SimulationPage = () => {
     let timer;
     if (isSimulationRunning && !isSimulationPaused && countdownTime > 0) {
       timer = setInterval(() => {
-        setCountdownTime((prev) => {
-          const newValue = Math.max(0, prev - 1);
-          // Log when timer reaches zero
-          if (newValue === 0) console.log("Timer reached zero");
-          return newValue;
-        });
+        setCountdownTime((prev) => Math.max(0, prev - 1));
       }, 1000);
-
-      console.log("Timer started with countdown:", countdownTime);
-    } else if (countdownTime === 0) {
-      console.log("Timer is zero or simulation is not running/is paused");
     }
-
-    return () => {
-      if (timer) {
-        clearInterval(timer);
-        console.log("Timer cleared");
-      }
-    };
+    return () => clearInterval(timer);
   }, [isSimulationRunning, isSimulationPaused, countdownTime]);
 
   useEffect(() => {
@@ -108,31 +93,12 @@ const SimulationPage = () => {
         if (data.type === "simulation_status") {
           dispatch(setSimulationStatus(data.data.isRunning));
           dispatch(setSimulationPaused(data.data.isPaused));
-          if (data.data.estimatedTimeToTarget !== undefined) {
-            console.log(
-              "Received time estimate:",
-              data.data.estimatedTimeToTarget
-            );
-
-            if (data.data.estimatedTimeToTarget === "Cannot reach target") {
-              console.log("System cannot reach target temperature");
-              setEstimatedTime(-1); // Special value to indicate cannot reach
-              setCountdownTime(0);
-              setCanReachTarget(false);
-            } else {
-              // It's a number
-              const timeInSeconds = data.data.estimatedTimeToTarget;
-              setEstimatedTime(timeInSeconds);
-              setCountdownTime(timeInSeconds);
-              setCanReachTarget(true);
-              console.log("Set countdown time to:", timeInSeconds);
-            }
-          }
-
-          if (data.data.canReachTarget !== undefined) {
-            setCanReachTarget(data.data.canReachTarget);
+          if (data.data.estimatedTimeToTarget) {
+            setEstimatedTime(data.data.estimatedTimeToTarget);
+            setCountdownTime(data.data.estimatedTimeToTarget);
           }
         }
+
         // Handle temperature+status updates from main loop
         else if (data.system_status) {
           // Mapping backend snake_case to frontend camelCase
@@ -161,33 +127,6 @@ const SimulationPage = () => {
               },
             })
           );
-
-          if (data.system_status.can_reach_target !== undefined) {
-            setCanReachTarget(data.system_status.can_reach_target);
-
-            // If we can't reach target, update UI accordingly
-            if (data.system_status.can_reach_target === false) {
-              console.log(
-                "System cannot reach target (can_reach_target: false)"
-              );
-              setEstimatedTime(-1);
-              setCountdownTime(0);
-            }
-          }
-
-          // Check time_to_target in system_status
-          if (data.system_status.time_to_target !== undefined) {
-            if (data.system_status.time_to_target === "Cannot reach target") {
-              setEstimatedTime(-1);
-              setCountdownTime(0);
-            } else if (typeof data.system_status.time_to_target === "number") {
-              const timeInSeconds = Math.round(
-                data.system_status.time_to_target * 60
-              );
-              setEstimatedTime(timeInSeconds);
-              setCountdownTime(timeInSeconds);
-            }
-          }
 
           // Add temperature data point
           setTemperatureData((prev) =>
@@ -238,17 +177,6 @@ const SimulationPage = () => {
     const update = { [parameter]: value };
     dispatch(updateHVACParameters({ system: SYSTEM_TYPE, parameters: update }));
     ws?.send(JSON.stringify({ type: "hvac_parameters", data: update }));
-    if (parameter === "waterFlowRate") {
-      // Request a status update
-      setTimeout(() => {
-        ws?.send(
-          JSON.stringify({
-            type: "get_status",
-            include_time_estimate: true,
-          })
-        );
-      }, 100); // Small delay to ensure parameter change is processed first
-    }
   };
 
   const StatusCard = ({ title, value, unit, icon }) => (
@@ -990,13 +918,6 @@ const SimulationPage = () => {
                     if (action === "start") {
                       dispatch(setSimulationStatus(true));
                       dispatch(setSimulationPaused(false));
-                      setTimeout(() => {
-                        ws?.send(
-                          JSON.stringify({
-                            type: "get_time_to_target",
-                          })
-                        );
-                      }, 500);
                     } else if (action === "pause") {
                       dispatch(setSimulationPaused(true));
                     } else if (action === "resume") {
@@ -1057,7 +978,7 @@ const SimulationPage = () => {
                   ""
                 )}
               </Grid>
-              {isSimulationRunning && (
+              {countdownTime > 0 && (
                 <Box
                   sx={{
                     display: "flex",
@@ -1076,24 +997,17 @@ const SimulationPage = () => {
                     variant="h6"
                     sx={{ color: theme.palette.text.secondary }}
                   >
-                    {!canReachTarget ? "Status:" : "Time to Target:"}
+                    Time to Target:
                   </Typography>
                   <Typography
                     variant="h6"
                     sx={{
-                      color: !canReachTarget
-                        ? theme.palette.warning.main
-                        : theme.palette.primary.main,
+                      color: theme.palette.primary.main,
                       fontWeight: "bold",
                     }}
                   >
-                    {!canReachTarget
-                      ? "Cannot Reach Target"
-                      : countdownTime > 0
-                      ? `${Math.floor(countdownTime / 60)}:${String(
-                          Math.floor(countdownTime % 60)
-                        ).padStart(2, "0")}`
-                      : "Calculating..."}
+                    {Math.floor(countdownTime / 60)}:
+                    {String(Math.floor(countdownTime % 60)).padStart(2, "0")}
                   </Typography>
                 </Box>
               )}

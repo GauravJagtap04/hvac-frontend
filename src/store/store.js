@@ -3,7 +3,7 @@ import { createSlice } from "@reduxjs/toolkit";
 import authReducer from "./slices/authSlice";
 
 const initialState = {
-  selectedSystem: "splitSystem", // or "vrfSystem", "heatPumpSystem", "chilledWaterSystem"
+  selectedSystem: "split system", // or "variable refrigernat flow system", "heat pump system", "chilled water system"
   systems: {
     splitSystem: {
       roomParameters: {

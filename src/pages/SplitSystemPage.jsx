@@ -46,17 +46,17 @@ import {
 } from "../store/store";
 import { Link } from "react-router-dom";
 
+const SYSTEM_TYPE = "splitSystem";
+
 const SimulationPage = () => {
   const theme = useTheme();
   const dispatch = useDispatch();
-  const {
-    roomParameters,
-    hvacParameters,
-    systemStatus,
-    isConnected,
-    isSimulationRunning,
-    isSimulationPaused,
-  } = useSelector((state) => state.hvac);
+  const { isConnected, isSimulationRunning, isSimulationPaused } = useSelector(
+    (state) => state.hvac
+  );
+  const { roomParameters, hvacParameters, systemStatus } = useSelector(
+    (state) => state.hvac.systems[SYSTEM_TYPE]
+  );
 
   const [temperatureData, setTemperatureData] = useState([]);
   const [ws, setWs] = useState(null);
@@ -75,7 +75,7 @@ const SimulationPage = () => {
 
   useEffect(() => {
     const websocket = new WebSocket(
-      "ws://localhost:8000/ws?system_type=split-system&client_id=split_system_client"
+      "ws://localhost:8000/ws?system_type=split-system"
     );
 
     websocket.onopen = () => {
@@ -86,30 +86,54 @@ const SimulationPage = () => {
     websocket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log("Received websocket data:", data); // Debug logging
+
+        // Handle simulation control responses
         if (data.type === "simulation_status") {
           dispatch(setSimulationStatus(data.data.isRunning));
           dispatch(setSimulationPaused(data.data.isPaused));
-          setEstimatedTime(data.data.estimatedTimeToTarget);
-          setCountdownTime(data.data.estimatedTimeToTarget);
-        } else if (data.system_status) {
+          if (data.data.estimatedTimeToTarget) {
+            setEstimatedTime(data.data.estimatedTimeToTarget);
+            setCountdownTime(data.data.estimatedTimeToTarget);
+          }
+        }
+        // Handle temperature+status updates from main loop
+        else if (data.system_status) {
+          // Mapping backend snake_case to frontend camelCase
           dispatch(
             updateSystemStatus({
-              roomTemperature: data.system_status.room_temperature,
-              coolingCapacityKw: data.system_status.cooling_capacity_kw,
-              energyConsumptionW: data.system_status.energy_consumption_w,
-              heatGainW: data.system_status.heat_gain_w,
-              cop: data.system_status.cop,
-              refrigerantFlowGs: data.system_status.refrigerant_flow_gs,
+              system: SYSTEM_TYPE,
+              status: {
+                roomTemperature: data.system_status.room_temperature,
+                targetTemperature: data.system_status.target_temperature,
+                coolingCapacityKw: data.system_status.cooling_capacity_kw,
+                coolingCapacityBtu: data.system_status.cooling_capacity_btu,
+                energyConsumptionW: data.system_status.energy_consumption_w,
+                refrigerantFlowGs: data.system_status.refrigerant_flow_gs,
+                heatGainW: data.system_status.heat_gain_w,
+                cop: data.system_status.cop,
+              },
             })
           );
 
+          // Add temperature data point
           setTemperatureData((prev) =>
             [
               ...prev,
               {
                 time: new Date().toLocaleTimeString(),
                 temperature: data.system_status.room_temperature,
-                target: roomParameters.targetTemp,
+              },
+            ].slice(-20)
+          );
+        } else if (data.temperature) {
+          // Handle simple temperature updates
+          setTemperatureData((prev) =>
+            [
+              ...prev,
+              {
+                time: new Date().toLocaleTimeString(),
+                temperature: data.temperature,
               },
             ].slice(-20)
           );
@@ -133,13 +157,13 @@ const SimulationPage = () => {
 
   const handleRoomParameterChange = (parameter) => (event, value) => {
     const update = { [parameter]: value };
-    dispatch(updateRoomParameters(update));
+    dispatch(updateRoomParameters({ system: SYSTEM_TYPE, parameters: update }));
     ws?.send(JSON.stringify({ type: "room_parameters", data: update }));
   };
 
   const handleHVACParameterChange = (parameter) => (event, value) => {
     const update = { [parameter]: value };
-    dispatch(updateHVACParameters(update));
+    dispatch(updateHVACParameters({ system: SYSTEM_TYPE, parameters: update }));
     ws?.send(JSON.stringify({ type: "hvac_parameters", data: update }));
   };
 
@@ -182,7 +206,7 @@ const SimulationPage = () => {
           fontWeight: "bold",
         }}
       >
-        {value}
+        {value !== undefined ? value : "0.0"}
       </Typography>
       <Typography variant="body1" sx={{ color: "text.secondary" }}>
         {unit}
@@ -237,7 +261,7 @@ const SimulationPage = () => {
         <Grid item xs={12} md={3}>
           <StatusCard
             title="Room Temperature"
-            value={systemStatus.roomTemperature.toFixed(1)}
+            value={(systemStatus?.roomTemperature || 25.0).toFixed(1)}
             unit="°C"
             icon={
               <ThermostatAuto
@@ -250,7 +274,7 @@ const SimulationPage = () => {
         <Grid item xs={12} md={3}>
           <StatusCard
             title="Energy Usage"
-            value={(systemStatus.energyConsumptionW / 1000).toFixed(2)}
+            value={((systemStatus?.energyConsumptionW || 0) / 1000).toFixed(2)}
             unit="kW"
             icon={
               <Power sx={{ fontSize: 48, color: theme.palette.primary.main }} />
@@ -261,7 +285,7 @@ const SimulationPage = () => {
         <Grid item xs={12} md={3}>
           <StatusCard
             title="COP"
-            value={systemStatus.cop.toFixed(2)}
+            value={(systemStatus?.cop || 3.0).toFixed(2)}
             unit=""
             icon={
               <Speed sx={{ fontSize: 48, color: theme.palette.primary.main }} />
@@ -272,7 +296,7 @@ const SimulationPage = () => {
         <Grid item xs={12} md={3}>
           <StatusCard
             title="Refrigerant Flow"
-            value={systemStatus.refrigerantFlowGs.toFixed(1)}
+            value={(systemStatus?.refrigerantFlowGs || 0).toFixed(1)}
             unit="g/s"
             icon={
               <Opacity
@@ -378,6 +402,7 @@ const SimulationPage = () => {
                   label="Length (m)"
                   type="number"
                   value={roomParameters.length}
+                  disabled={isSimulationRunning && !isSimulationPaused}
                   onChange={(e) =>
                     handleRoomParameterChange("length")(
                       e,
@@ -403,6 +428,7 @@ const SimulationPage = () => {
                   label="Width (m)"
                   type="number"
                   value={roomParameters.breadth}
+                  disabled={isSimulationRunning && !isSimulationPaused}
                   onChange={(e) =>
                     handleRoomParameterChange("breadth")(
                       e,
@@ -429,6 +455,7 @@ const SimulationPage = () => {
                   label="Height (m)"
                   type="number"
                   value={roomParameters.height}
+                  disabled={isSimulationRunning && !isSimulationPaused}
                   onChange={(e) =>
                     handleRoomParameterChange("height")(
                       e,
@@ -454,6 +481,7 @@ const SimulationPage = () => {
                   label="No. of People"
                   type="number"
                   value={roomParameters.numPeople}
+                  disabled={isSimulationRunning && !isSimulationPaused}
                   onChange={(e) =>
                     handleRoomParameterChange("numPeople")(
                       e,
@@ -557,6 +585,7 @@ const SimulationPage = () => {
                   step={0.5}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
                 />
               </Grid>
 
@@ -572,6 +601,7 @@ const SimulationPage = () => {
                   step={0.5}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
                 />
               </Grid>
 
@@ -587,6 +617,7 @@ const SimulationPage = () => {
                   step={0.5}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
                 />
               </Grid>
             </Grid>
@@ -628,6 +659,7 @@ const SimulationPage = () => {
                   step={0.5}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
                 />
               </Grid>
 
@@ -643,6 +675,7 @@ const SimulationPage = () => {
                   step={0.1}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
                 />
               </Grid>
 
@@ -658,6 +691,7 @@ const SimulationPage = () => {
                   step={1}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
                 />
               </Grid>
             </Grid>
@@ -696,19 +730,26 @@ const SimulationPage = () => {
                     ) : null
                   }
                   onClick={() => {
+                    const action = isSimulationRunning
+                      ? isSimulationPaused
+                        ? "resume"
+                        : "pause"
+                      : "start";
+
                     const message = {
                       type: "simulation_control",
-                      data: {
-                        action: isSimulationRunning
-                          ? isSimulationPaused
-                            ? "resume"
-                            : "pause"
-                          : "start",
-                      },
+                      data: { action },
                     };
+
                     ws?.send(JSON.stringify(message));
-                    if (isSimulationRunning) {
-                      dispatch(setSimulationPaused(!isSimulationPaused));
+
+                    if (action === "start") {
+                      dispatch(setSimulationStatus(true));
+                      dispatch(setSimulationPaused(false));
+                    } else if (action === "pause") {
+                      dispatch(setSimulationPaused(true));
+                    } else if (action === "resume") {
+                      dispatch(setSimulationPaused(false));
                     }
                   }}
                   sx={{
@@ -742,6 +783,8 @@ const SimulationPage = () => {
                         },
                       };
                       ws?.send(JSON.stringify(message));
+                      dispatch(setSimulationStatus(false));
+                      dispatch(setSimulationPaused(false));
                     }}
                     sx={{
                       px: 6,
@@ -750,7 +793,7 @@ const SimulationPage = () => {
                       fontWeight: "bold",
                       borderRadius: 2,
                       textTransform: "none",
-                      marginLeft: 2, // Add margin-left for spacing
+                      marginLeft: 2,
                       boxShadow: `0 0 20px ${alpha(
                         theme.palette.error.main,
                         0.4

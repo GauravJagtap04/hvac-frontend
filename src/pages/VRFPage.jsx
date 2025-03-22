@@ -46,6 +46,8 @@ import {
 } from "../store/store";
 import { Link } from "react-router-dom";
 
+const SYSTEM_TYPE = "vrfSystem";
+
 const SimulationPage = () => {
   const theme = useTheme();
   const dispatch = useDispatch();

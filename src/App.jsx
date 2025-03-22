@@ -18,7 +18,6 @@ import ChilledWaterPage from "./pages/ChilledWaterPage";
 import Login from "./components/Login";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import TrainingPage from "./pages/TrainingPage";
-import Tools from "./pages/Tools";
 import SettingsPage from "./pages/SettingsPage";
 
 // Create router with all routes
@@ -45,7 +44,6 @@ const router = createBrowserRouter(
         />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/training" element={<TrainingPage />} />
-        <Route path="/tools" element={<Tools />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>

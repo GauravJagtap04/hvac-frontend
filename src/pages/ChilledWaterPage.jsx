@@ -46,36 +46,52 @@ import {
 } from "../store/store";
 import { Link } from "react-router-dom";
 
+const SYSTEM_TYPE = "chilledWaterSystem";
+
 const SimulationPage = () => {
   const theme = useTheme();
   const dispatch = useDispatch();
-  const {
-    roomParameters,
-    hvacParameters,
-    systemStatus,
-    isConnected,
-    isSimulationRunning,
-    isSimulationPaused,
-  } = useSelector((state) => state.hvac);
+  const { isConnected, isSimulationRunning, isSimulationPaused } = useSelector(
+    (state) => state.hvac
+  );
+  const { roomParameters, hvacParameters, systemStatus } = useSelector(
+    (state) => state.hvac.systems[SYSTEM_TYPE]
+  );
 
   const [temperatureData, setTemperatureData] = useState([]);
   const [ws, setWs] = useState(null);
   const [estimatedTime, setEstimatedTime] = useState(0);
   const [countdownTime, setCountdownTime] = useState(0);
+  const [canReachTarget, setCanReachTarget] = useState(true);
 
   useEffect(() => {
     let timer;
     if (isSimulationRunning && !isSimulationPaused && countdownTime > 0) {
       timer = setInterval(() => {
-        setCountdownTime((prev) => Math.max(0, prev - 1));
+        setCountdownTime((prev) => {
+          const newValue = Math.max(0, prev - 1);
+          // Log when timer reaches zero
+          if (newValue === 0) console.log("Timer reached zero");
+          return newValue;
+        });
       }, 1000);
+
+      console.log("Timer started with countdown:", countdownTime);
+    } else if (countdownTime === 0) {
+      console.log("Timer is zero or simulation is not running/is paused");
     }
-    return () => clearInterval(timer);
+
+    return () => {
+      if (timer) {
+        clearInterval(timer);
+        console.log("Timer cleared");
+      }
+    };
   }, [isSimulationRunning, isSimulationPaused, countdownTime]);
 
   useEffect(() => {
     const websocket = new WebSocket(
-      "ws://localhost:8000/ws?system_type=chilled-water-system&client_id=chilled_water_system_client"
+      "ws://localhost:8000/ws?system_type=chilled-water-system"
     );
 
     websocket.onopen = () => {
@@ -86,30 +102,111 @@ const SimulationPage = () => {
     websocket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log("Received websocket data:", data); // Debug logging
+
+        // Handle simulation control responses
         if (data.type === "simulation_status") {
           dispatch(setSimulationStatus(data.data.isRunning));
           dispatch(setSimulationPaused(data.data.isPaused));
-          setEstimatedTime(data.data.estimatedTimeToTarget);
-          setCountdownTime(data.data.estimatedTimeToTarget);
-        } else if (data.system_status) {
+          if (data.data.estimatedTimeToTarget !== undefined) {
+            console.log(
+              "Received time estimate:",
+              data.data.estimatedTimeToTarget
+            );
+
+            if (data.data.estimatedTimeToTarget === "Cannot reach target") {
+              console.log("System cannot reach target temperature");
+              setEstimatedTime(-1); // Special value to indicate cannot reach
+              setCountdownTime(0);
+              setCanReachTarget(false);
+            } else {
+              // It's a number
+              const timeInSeconds = data.data.estimatedTimeToTarget;
+              setEstimatedTime(timeInSeconds);
+              setCountdownTime(timeInSeconds);
+              setCanReachTarget(true);
+              console.log("Set countdown time to:", timeInSeconds);
+            }
+          }
+
+          if (data.data.canReachTarget !== undefined) {
+            setCanReachTarget(data.data.canReachTarget);
+          }
+        }
+        // Handle temperature+status updates from main loop
+        else if (data.system_status) {
+          // Mapping backend snake_case to frontend camelCase
           dispatch(
             updateSystemStatus({
-              roomTemperature: data.system_status.room_temperature,
-              coolingCapacityKw: data.system_status.cooling_capacity_kw,
-              energyConsumptionW: data.system_status.energy_consumption_w,
-              heatGainW: data.system_status.heat_gain_w,
-              cop: data.system_status.cop,
-              refrigerantFlowGs: data.system_status.refrigerant_flow_gs,
+              system: SYSTEM_TYPE,
+              status: {
+                roomTemperature: data.system_status.room_temperature,
+                targetTemperature: data.system_status.target_temperature,
+                coolingCapacityKw: data.system_status.cooling_capacity_kw,
+                coolingCapacityBtu: data.system_status.cooling_capacity_btu,
+                energyConsumptionW: data.system_status.energy_consumption_w,
+                refrigerantFlowGs: data.system_status.refrigerant_flow_gs,
+                heatGainW: data.system_status.heat_gain_w,
+                cop: data.system_status.cop,
+                waterFlowRate: data.system_status.water_flow_rate_ls,
+                chilledWaterSupplyTemp:
+                  data.system_status.chilled_water_supply_temp,
+                chilledWaterReturnTemp:
+                  data.system_status.chilled_water_return_temp,
+                pumpPowerW: data.system_status.pump_power_w,
+                primarySecondaryLoop: data.system_status.primary_secondary_loop,
+                glycolPercentage: data.system_status.glycol_percentage,
+                heatExchangerEfficiency:
+                  data.system_status.heat_exchanger_efficiency,
+              },
             })
           );
 
+          if (data.system_status.can_reach_target !== undefined) {
+            setCanReachTarget(data.system_status.can_reach_target);
+
+            // If we can't reach target, update UI accordingly
+            if (data.system_status.can_reach_target === false) {
+              console.log(
+                "System cannot reach target (can_reach_target: false)"
+              );
+              setEstimatedTime(-1);
+              setCountdownTime(0);
+            }
+          }
+
+          // Check time_to_target in system_status
+          if (data.system_status.time_to_target !== undefined) {
+            if (data.system_status.time_to_target === "Cannot reach target") {
+              setEstimatedTime(-1);
+              setCountdownTime(0);
+            } else if (typeof data.system_status.time_to_target === "number") {
+              const timeInSeconds = Math.round(
+                data.system_status.time_to_target * 60
+              );
+              setEstimatedTime(timeInSeconds);
+              setCountdownTime(timeInSeconds);
+            }
+          }
+
+          // Add temperature data point
           setTemperatureData((prev) =>
             [
               ...prev,
               {
                 time: new Date().toLocaleTimeString(),
                 temperature: data.system_status.room_temperature,
-                target: roomParameters.targetTemp,
+              },
+            ].slice(-20)
+          );
+        } else if (data.temperature) {
+          // Handle simple temperature updates
+          setTemperatureData((prev) =>
+            [
+              ...prev,
+              {
+                time: new Date().toLocaleTimeString(),
+                temperature: data.temperature,
               },
             ].slice(-20)
           );
@@ -133,14 +230,25 @@ const SimulationPage = () => {
 
   const handleRoomParameterChange = (parameter) => (event, value) => {
     const update = { [parameter]: value };
-    dispatch(updateRoomParameters(update));
+    dispatch(updateRoomParameters({ system: SYSTEM_TYPE, parameters: update }));
     ws?.send(JSON.stringify({ type: "room_parameters", data: update }));
   };
 
   const handleHVACParameterChange = (parameter) => (event, value) => {
     const update = { [parameter]: value };
-    dispatch(updateHVACParameters(update));
+    dispatch(updateHVACParameters({ system: SYSTEM_TYPE, parameters: update }));
     ws?.send(JSON.stringify({ type: "hvac_parameters", data: update }));
+    if (parameter === "waterFlowRate") {
+      // Request a status update
+      setTimeout(() => {
+        ws?.send(
+          JSON.stringify({
+            type: "get_status",
+            include_time_estimate: true,
+          })
+        );
+      }, 100); // Small delay to ensure parameter change is processed first
+    }
   };
 
   const StatusCard = ({ title, value, unit, icon }) => (
@@ -182,7 +290,7 @@ const SimulationPage = () => {
           fontWeight: "bold",
         }}
       >
-        {value}
+        {value !== undefined ? value : "0.0"}
       </Typography>
       <Typography variant="body1" sx={{ color: "text.secondary" }}>
         {unit}
@@ -237,7 +345,7 @@ const SimulationPage = () => {
         <Grid item xs={12} md={3}>
           <StatusCard
             title="Room Temperature"
-            value={systemStatus.roomTemperature.toFixed(1)}
+            value={(systemStatus.roomTemperature || 25.0).toFixed(1)}
             unit="°C"
             icon={
               <ThermostatAuto
@@ -250,7 +358,7 @@ const SimulationPage = () => {
         <Grid item xs={12} md={3}>
           <StatusCard
             title="Energy Usage"
-            value={(systemStatus.energyConsumptionW / 1000).toFixed(2)}
+            value={((systemStatus.energyConsumptionW || 0) / 1000).toFixed(2)}
             unit="kW"
             icon={
               <Power sx={{ fontSize: 48, color: theme.palette.primary.main }} />
@@ -261,7 +369,7 @@ const SimulationPage = () => {
         <Grid item xs={12} md={3}>
           <StatusCard
             title="COP"
-            value={systemStatus.cop.toFixed(2)}
+            value={(systemStatus.cop || 3.0).toFixed(2)}
             unit=""
             icon={
               <Speed sx={{ fontSize: 48, color: theme.palette.primary.main }} />
@@ -271,9 +379,9 @@ const SimulationPage = () => {
 
         <Grid item xs={12} md={3}>
           <StatusCard
-            title="Refrigerant Flow"
-            value={systemStatus.refrigerantFlowGs.toFixed(1)}
-            unit="g/s"
+            title="Water Flow"
+            value={(systemStatus.waterFlowRate || 0.5).toFixed(1)}
+            unit="L/s"
             icon={
               <Opacity
                 sx={{ fontSize: 48, color: theme.palette.primary.main }}
@@ -378,6 +486,7 @@ const SimulationPage = () => {
                   label="Length (m)"
                   type="number"
                   value={roomParameters.length}
+                  disabled={isSimulationRunning && !isSimulationPaused}
                   onChange={(e) =>
                     handleRoomParameterChange("length")(
                       e,
@@ -403,6 +512,7 @@ const SimulationPage = () => {
                   label="Width (m)"
                   type="number"
                   value={roomParameters.breadth}
+                  disabled={isSimulationRunning && !isSimulationPaused}
                   onChange={(e) =>
                     handleRoomParameterChange("breadth")(
                       e,
@@ -429,6 +539,7 @@ const SimulationPage = () => {
                   label="Height (m)"
                   type="number"
                   value={roomParameters.height}
+                  disabled={isSimulationRunning && !isSimulationPaused}
                   onChange={(e) =>
                     handleRoomParameterChange("height")(
                       e,
@@ -454,6 +565,7 @@ const SimulationPage = () => {
                   label="No. of People"
                   type="number"
                   value={roomParameters.numPeople}
+                  disabled={isSimulationRunning && !isSimulationPaused}
                   onChange={(e) =>
                     handleRoomParameterChange("numPeople")(
                       e,
@@ -501,6 +613,7 @@ const SimulationPage = () => {
                     onChange={(e) =>
                       handleRoomParameterChange("mode")(e, e.target.value)
                     }
+                    disabled={isSimulationRunning && !isSimulationPaused}
                   >
                     <MenuItem value="cooling">Cooling</MenuItem>
                     <MenuItem value="heating">Heating</MenuItem>
@@ -537,6 +650,7 @@ const SimulationPage = () => {
                         e.target.value
                       )
                     }
+                    disabled={isSimulationRunning && !isSimulationPaused}
                   >
                     <MenuItem value="low">Low</MenuItem>
                     <MenuItem value="medium">Medium</MenuItem>
@@ -557,6 +671,7 @@ const SimulationPage = () => {
                   step={0.5}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
                 />
               </Grid>
 
@@ -572,6 +687,7 @@ const SimulationPage = () => {
                   step={0.5}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
                 />
               </Grid>
 
@@ -587,6 +703,23 @@ const SimulationPage = () => {
                   step={0.5}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Fan Coil Units: {roomParameters.fanCoilUnits || 1}
+                </Typography>
+                <Slider
+                  value={roomParameters.fanCoilUnits || 1}
+                  onChange={handleRoomParameterChange("fanCoilUnits")}
+                  min={1}
+                  max={8}
+                  step={1}
+                  marks
+                  valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
                 />
               </Grid>
             </Grid>
@@ -628,6 +761,7 @@ const SimulationPage = () => {
                   step={0.5}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
                 />
               </Grid>
 
@@ -643,12 +777,13 @@ const SimulationPage = () => {
                   step={0.1}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
                 />
               </Grid>
 
               <Grid item xs={12}>
                 <Typography gutterBottom>
-                  Fan Speed: {hvacParameters.fanSpeed}%
+                  Fan Speed: {hvacParameters.fanSpeed} %
                 </Typography>
                 <Slider
                   value={hvacParameters.fanSpeed}
@@ -658,7 +793,150 @@ const SimulationPage = () => {
                   step={1}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
                 />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Water Flow Rate: {hvacParameters.chilledWaterFlowRate || 0.5}{" "}
+                  L/s
+                </Typography>
+                <Slider
+                  value={hvacParameters.chilledWaterFlowRate}
+                  onChange={handleHVACParameterChange("chilledWaterFlowRate")}
+                  min={0.1}
+                  max={5.0}
+                  step={0.1}
+                  marks
+                  valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Chilled Water Supply Temperature:{" "}
+                  {hvacParameters.chilledWaterSupplyTemp} °C
+                </Typography>
+                <Slider
+                  value={hvacParameters.chilledWaterSupplyTemp}
+                  onChange={handleHVACParameterChange("chilledWaterSupplyTemp")}
+                  min={4.0}
+                  max={15.0}
+                  step={0.5}
+                  marks
+                  valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Chilled Water Return Temperature:{" "}
+                  {hvacParameters.chilledWaterReturnTemp} °C
+                </Typography>
+                <Slider
+                  value={hvacParameters.chilledWaterReturnTemp}
+                  onChange={handleHVACParameterChange("chilledWaterReturnTemp")}
+                  min={8.0}
+                  max={20.0}
+                  step={0.5}
+                  marks
+                  valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Pump Power: {hvacParameters.pumpPower} kW
+                </Typography>
+                <Slider
+                  value={hvacParameters.pumpPower}
+                  onChange={handleHVACParameterChange("pumpPower")}
+                  min={0.2}
+                  max={5.0}
+                  step={0.1}
+                  marks
+                  valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Glycol Percentage: {hvacParameters.glycolPercentage} %
+                </Typography>
+                <Slider
+                  value={hvacParameters.glycolPercentage}
+                  onChange={handleHVACParameterChange("glycolPercentage")}
+                  min={0}
+                  max={50}
+                  step={5}
+                  marks
+                  valueLabelDisplay="auto"
+                  disabled={isSimulationRunning && !isSimulationPaused}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Heat Exchanger Efficiency:{" "}
+                  {hvacParameters.heatExchangerEfficiency} %
+                </Typography>
+                <Slider
+                  value={hvacParameters.heatExchangerEfficiency}
+                  onChange={handleHVACParameterChange(
+                    "heatExchangerEfficiency"
+                  )}
+                  min={0.5}
+                  max={0.98}
+                  step={0.01}
+                  disabled={isSimulationRunning && !isSimulationPaused}
+                  marks
+                  valueLabelDisplay="auto"
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <FormControl
+                  fullWidth
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      "& fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.2),
+                      },
+                      "&:hover fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.3),
+                      },
+                    },
+                  }}
+                >
+                  <InputLabel
+                    sx={{
+                      backgroundColor: theme.palette.background.paper,
+                      padding: "0 6px",
+                    }}
+                  >
+                    Primary/Secondary Loop
+                  </InputLabel>
+                  <Select
+                    value={
+                      hvacParameters.primarySecondaryLoop ? "true" : "false"
+                    }
+                    onChange={(e) =>
+                      handleHVACParameterChange("primarySecondaryLoop")(
+                        e,
+                        e.target.value === "true"
+                      )
+                    }
+                    disabled={isSimulationRunning && !isSimulationPaused}
+                  >
+                    <MenuItem value="true">True</MenuItem>
+                    <MenuItem value="false">False</MenuItem>
+                  </Select>
+                </FormControl>
               </Grid>
             </Grid>
           </Paper>
@@ -696,19 +974,33 @@ const SimulationPage = () => {
                     ) : null
                   }
                   onClick={() => {
+                    const action = isSimulationRunning
+                      ? isSimulationPaused
+                        ? "resume"
+                        : "pause"
+                      : "start";
+
                     const message = {
                       type: "simulation_control",
-                      data: {
-                        action: isSimulationRunning
-                          ? isSimulationPaused
-                            ? "resume"
-                            : "pause"
-                          : "start",
-                      },
+                      data: { action },
                     };
+
                     ws?.send(JSON.stringify(message));
-                    if (isSimulationRunning) {
-                      dispatch(setSimulationPaused(!isSimulationPaused));
+
+                    if (action === "start") {
+                      dispatch(setSimulationStatus(true));
+                      dispatch(setSimulationPaused(false));
+                      setTimeout(() => {
+                        ws?.send(
+                          JSON.stringify({
+                            type: "get_time_to_target",
+                          })
+                        );
+                      }, 500);
+                    } else if (action === "pause") {
+                      dispatch(setSimulationPaused(true));
+                    } else if (action === "resume") {
+                      dispatch(setSimulationPaused(false));
                     }
                   }}
                   sx={{
@@ -742,6 +1034,8 @@ const SimulationPage = () => {
                         },
                       };
                       ws?.send(JSON.stringify(message));
+                      dispatch(setSimulationStatus(false));
+                      dispatch(setSimulationPaused(false));
                     }}
                     sx={{
                       px: 6,
@@ -750,7 +1044,7 @@ const SimulationPage = () => {
                       fontWeight: "bold",
                       borderRadius: 2,
                       textTransform: "none",
-                      marginLeft: 2, // Add margin-left for spacing
+                      marginLeft: 2,
                       boxShadow: `0 0 20px ${alpha(
                         theme.palette.error.main,
                         0.4
@@ -763,7 +1057,7 @@ const SimulationPage = () => {
                   ""
                 )}
               </Grid>
-              {countdownTime > 0 && (
+              {isSimulationRunning && (
                 <Box
                   sx={{
                     display: "flex",
@@ -782,17 +1076,24 @@ const SimulationPage = () => {
                     variant="h6"
                     sx={{ color: theme.palette.text.secondary }}
                   >
-                    Time to Target:
+                    {!canReachTarget ? "Status:" : "Time to Target:"}
                   </Typography>
                   <Typography
                     variant="h6"
                     sx={{
-                      color: theme.palette.primary.main,
+                      color: !canReachTarget
+                        ? theme.palette.warning.main
+                        : theme.palette.primary.main,
                       fontWeight: "bold",
                     }}
                   >
-                    {Math.floor(countdownTime / 60)}:
-                    {String(Math.floor(countdownTime % 60)).padStart(2, "0")}
+                    {!canReachTarget
+                      ? "Cannot Reach Target"
+                      : countdownTime > 0
+                      ? `${Math.floor(countdownTime / 60)}:${String(
+                          Math.floor(countdownTime % 60)
+                        ).padStart(2, "0")}`
+                      : "Calculating..."}
                   </Typography>
                 </Box>
               )}

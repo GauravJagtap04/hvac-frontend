@@ -10,7 +10,6 @@ import {
   FaCog,
   FaBook,
   FaCalculator,
-  FaTools,
   FaChevronLeft,
   FaHome,
   FaSignOutAlt,
@@ -96,9 +95,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
         {/* Training Resources */}
         {menuItem("/training", <FaBook />, "Training")}
 
-        {/* System Tools */}
-        {menuItem("/tools", <FaTools />, "Tools")}
-
         <div className="border-t border-slate-700 my-4"></div>
 
         {/* Settings */}
@@ -121,8 +117,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
           )}
         </button>
       </div>
-
-      
     </div>
   );
 };

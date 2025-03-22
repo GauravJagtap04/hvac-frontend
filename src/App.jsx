@@ -21,12 +21,22 @@ import TrainingPage from "./pages/TrainingPage";
 import SettingsPage from "./pages/SettingsPage";
 
 // Create router with all routes
+import ProtectedRoute from './components/ProtectedRoute';
+
+// ...existing imports...
+
 const router = createBrowserRouter(
   createRoutesFromElements(
     <Route>
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<Login />} />
-      <Route element={<MainLayout />}>
+      <Route
+        element={
+          <ProtectedRoute>
+            <MainLayout />
+          </ProtectedRoute>
+        }
+      >
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/simulations" element={<SimulationsPage />} />
         <Route path="/simulations/split-system" element={<SplitSystemPage />} />

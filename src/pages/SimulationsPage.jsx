@@ -6,16 +6,30 @@ import {
   Grid,
   Container,
   useTheme,
+  Snackbar,
+  Alert,
 } from "@mui/material";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useDispatch, useSelector } from "react-redux";
+import { setSelectedSystem } from "../store/store";
 
 const SimulationsPage = () => {
   const navigate = useNavigate();
   const theme = useTheme();
+  const dispatch = useDispatch();
+
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+
+  const { isSimulationRunning, selectedSystem } = useSelector(
+    (state) => state.hvac
+  );
 
   const simulations = [
     {
+      name: "split system",
       id: "split-system",
       title: "Split System HVAC",
       description:
@@ -25,6 +39,7 @@ const SimulationsPage = () => {
       color: "#4CAF50",
     },
     {
+      name: "variable refrigerant flow",
       id: "variable-refrigerant-flow",
       title: "Variable Refrigerant Flow",
       description: "VRF system simulation and analysis for energy efficiency",
@@ -33,6 +48,7 @@ const SimulationsPage = () => {
       color: "#2196F3",
     },
     {
+      name: "heat pump system",
       id: "heat-pump-system",
       title: "Heat Pump System",
       description: "Comprehensive heat pump system simulation and analysis",
@@ -41,6 +57,7 @@ const SimulationsPage = () => {
       color: "#FF5722",
     },
     {
+      name: "chilled water system",
       id: "chilled-water-system",
       title: "Chilled Water System",
       description:
@@ -50,6 +67,28 @@ const SimulationsPage = () => {
       color: "#9C27B0",
     },
   ];
+
+  const handleSimulationCardClick = (name, id, path) => {
+    if (isSimulationRunning && name !== selectedSystem) {
+      setSnackbarMessage(
+        `Please stop the ${selectedSystem} simulation before switching to another system.`
+      );
+      setOpenSnackbar(true);
+      return;
+    }
+
+    navigate(path);
+
+    if (id === "split-system") {
+      dispatch(setSelectedSystem("split system"));
+    } else if (id === "variable-refrigerant-flow") {
+      dispatch(setSelectedSystem("variable refrigerant flow system"));
+    } else if (id === "heat-pump-system") {
+      dispatch(setSelectedSystem("heat pump system"));
+    } else if (id === "chilled-water-system") {
+      dispatch(setSelectedSystem("chilled water system"));
+    }
+  };
 
   return (
     <Box
@@ -115,7 +154,13 @@ const SimulationsPage = () => {
                       background: simulation.color,
                     },
                   }}
-                  onClick={() => navigate(simulation.path)}
+                  onClick={() =>
+                    handleSimulationCardClick(
+                      simulation.name,
+                      simulation.id,
+                      simulation.path
+                    )
+                  }
                 >
                   <Box
                     sx={{
@@ -159,6 +204,20 @@ const SimulationsPage = () => {
           ))}
         </Grid>
       </Container>
+      <Snackbar
+        open={openSnackbar}
+        autoHideDuration={6000}
+        onClose={() => setOpenSnackbar(false)}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert
+          severity="warning"
+          variant="filled"
+          onClose={() => setOpenSnackbar(false)}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useDispatch, useSelector } from "react-redux";
 import {
   Box,
   Grid,
@@ -12,8 +11,6 @@ import {
   Button,
   FormControl,
   InputLabel,
-  Switch,
-  FormControlLabel,
   CircularProgress,
   Chip,
   useTheme,
@@ -35,162 +32,257 @@ import {
   Power,
   Opacity,
   People,
+  LocalFireDepartment,
+  AspectRatio,
+  WaterDrop,
+  TrendingUp,
 } from "@mui/icons-material";
-import {
-  updateRoomParameters,
-  updateHVACParameters,
-  updateSystemStatus,
-  setConnectionStatus,
-  setSimulationStatus,
-  setSimulationPaused,
-} from "../store/store";
-import { Link } from "react-router-dom";
 
-const SYSTEM_TYPE = "vrfSystem";
-
-const SimulationPage = () => {
+const VRFPage = () => {
   const theme = useTheme();
-  const dispatch = useDispatch();
-  const {
-    roomParameters,
-    hvacParameters,
-    systemStatus,
-    isConnected,
-    isSimulationRunning,
-    isSimulationPaused,
-  } = useSelector((state) => state.hvac);
 
-  const [temperatureData, setTemperatureData] = useState([]);
-  const [ws, setWs] = useState(null);
-  const [estimatedTime, setEstimatedTime] = useState(0);
-  const [countdownTime, setCountdownTime] = useState(0);
-
-  useEffect(() => {
-    let timer;
-    if (isSimulationRunning && !isSimulationPaused && countdownTime > 0) {
-      timer = setInterval(() => {
-        setCountdownTime((prev) => Math.max(0, prev - 1));
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [isSimulationRunning, isSimulationPaused, countdownTime]);
-
-  useEffect(() => {
-    const websocket = new WebSocket(
-      "ws://localhost:8000/ws?system_type=vrf-system&client_id=vrf_system_client"
-    );
-
-    websocket.onopen = () => {
-      dispatch(setConnectionStatus(true));
-      console.log("Connected to VRF system simulator");
-    };
-
-    websocket.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "simulation_status") {
-          dispatch(setSimulationStatus(data.data.isRunning));
-          dispatch(setSimulationPaused(data.data.isPaused));
-          setEstimatedTime(data.data.estimatedTimeToTarget);
-          setCountdownTime(data.data.estimatedTimeToTarget);
-        } else if (data.system_status) {
-          dispatch(
-            updateSystemStatus({
-              roomTemperature: data.system_status.room_temperature,
-              coolingCapacityKw: data.system_status.cooling_capacity_kw,
-              energyConsumptionW: data.system_status.energy_consumption_w,
-              heatGainW: data.system_status.heat_gain_w,
-              cop: data.system_status.cop,
-              refrigerantFlowGs: data.system_status.refrigerant_flow_gs,
-            })
-          );
-
-          setTemperatureData((prev) =>
-            [
-              ...prev,
-              {
-                time: new Date().toLocaleTimeString(),
-                temperature: data.system_status.room_temperature,
-                target: roomParameters.targetTemp,
-              },
-            ].slice(-20)
-          );
-        }
-      } catch (error) {
-        console.error("Error processing WebSocket message:", error);
-      }
-    };
-
-    websocket.onclose = () => {
-      dispatch(setConnectionStatus(false));
-      console.log("Disconnected from VRF system simulator");
-    };
-
-    setWs(websocket);
-
-    return () => {
-      websocket.close();
-    };
-  }, [dispatch]);
-
-  const handleRoomParameterChange = (parameter) => (event, value) => {
-    const update = { [parameter]: value };
-    dispatch(updateRoomParameters(update));
-    ws?.send(JSON.stringify({ type: "room_parameters", data: update }));
-  };
-
-  const handleHVACParameterChange = (parameter) => (event, value) => {
-    const update = { [parameter]: value };
-    dispatch(updateHVACParameters(update));
-    ws?.send(JSON.stringify({ type: "hvac_parameters", data: update }));
-  };
-
+  // Define StatusCard component inside VRFPage to access theme
   const StatusCard = ({ title, value, unit, icon }) => (
     <Paper
       sx={{
         p: 3,
         height: "100%",
         display: "flex",
-        flexDirection: "column",
         alignItems: "center",
-        background: `linear-gradient(135deg, ${alpha(
-          theme.palette.primary.main,
-          0.05
-        )} 0%, ${alpha(theme.palette.primary.main, 0.15)} 100%)`,
+        background: alpha(theme.palette.background.paper, 0.8),
         backdropFilter: "blur(10px)",
-        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
         borderRadius: 2,
-        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-        "&:hover": {
-          transform: "translateY(-4px)",
-          boxShadow: `0 8px 24px -4px ${alpha(
-            theme.palette.primary.main,
-            0.2
-          )}`,
-          border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-        },
+        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
       }}
     >
-      {icon}
-      <Typography variant="h6" sx={{ mt: 2, color: "text.secondary" }}>
-        {title}
-      </Typography>
-      <Typography
-        variant="h3"
-        sx={{
-          mt: 2,
-          mb: 1,
-          color: theme.palette.primary.main,
-          fontWeight: "bold",
-        }}
-      >
-        {value}
-      </Typography>
-      <Typography variant="body1" sx={{ color: "text.secondary" }}>
-        {unit}
-      </Typography>
+      <Box sx={{ mr: 2 }}>{icon}</Box>
+      <Box>
+        <Typography variant="h6" gutterBottom>
+          {title}
+        </Typography>
+        <Typography variant="h4" sx={{ fontWeight: "bold" }}>
+          {value}
+          {unit && (
+            <Typography component="span" variant="h6" sx={{ ml: 1 }}>
+              {unit}
+            </Typography>
+          )}
+        </Typography>
+      </Box>
     </Paper>
   );
+
+  // Local state management
+  const [isConnected, setIsConnected] = useState(false);
+  const [isSimulationRunning, setIsSimulationRunning] = useState(false);
+  const [isSimulationPaused, setIsSimulationPaused] = useState(false);
+  
+  // Room Parameters State - matching VRFRoomParameters
+  const [roomParameters, setRoomParameters] = useState({
+    length: 10.0,
+    breadth: 8.0,
+    height: 3.0,
+    currentTemp: 25.0,
+    targetTemp: 23.0,
+    externalTemp: 35.0,
+    wallInsulation: "medium",
+    humidity: 50.0,
+    numPeople: 0,
+    heatGainExternal: 0.0,
+    mode: "cooling"
+  });
+
+  // HVAC Parameters State - matching VRFHVACParameters
+  const [hvacParameters, setHvacParameters] = useState({
+    power: 5.0,
+    cop: 3.0,
+    airFlowRate: 0.5,
+    supplyTemp: 12.0,
+    fanSpeed: 100.0,
+    timeInterval: 1.0
+  });
+
+  // System Status State - matching get_system_status output
+  const [systemStatus, setSystemStatus] = useState({
+    roomTemperature: 25.0,
+    targetTemperature: 23.0,
+    coolingCapacityKw: 0,
+    coolingCapacityBtu: 0,
+    energyConsumptionW: 0,
+    refrigerantFlowGs: 0,
+    heatGainW: 0,
+    cop: 3.0,
+    mode: "cooling",
+    fanSpeed: 100,
+    humidity: 50,
+    numPeople: 0,
+    externalHeatGain: 0,
+    insulationLevel: "medium",
+    timeInterval: 1.0,
+    roomSize: 80,
+    externalTemperature: 35,
+    timeToTarget: 0,
+    canReachTarget: true,
+    tempChangeRate: 0,
+    ratedPowerKw: 5
+  });
+
+  // ... existing state for temperature data, websocket, etc.
+  const [temperatureData, setTemperatureData] = useState([]);
+  const [ws, setWs] = useState(null);
+  const [estimatedTime, setEstimatedTime] = useState(0);
+  const [countdownTime, setCountdownTime] = useState(0);
+
+  // WebSocket message handler
+  const handleWebSocketMessage = (data) => {
+    if (data.type === "simulation_status") {
+      setIsSimulationRunning(data.data.isRunning);
+      setIsSimulationPaused(data.data.isPaused);
+      setEstimatedTime(data.data.estimatedTimeToTarget);
+      setCountdownTime(data.data.estimatedTimeToTarget);
+    } else if (data.system_status) {
+      setSystemStatus(prevStatus => ({
+        ...prevStatus,
+        roomTemperature: data.system_status.room_temperature,
+        coolingCapacityKw: data.system_status.cooling_capacity_kw,
+        coolingCapacityBtu: data.system_status.cooling_capacity_btu,
+        energyConsumptionW: data.system_status.energy_consumption_w,
+        heatGainW: data.system_status.heat_gain_w,
+        refrigerantFlowGs: data.system_status.refrigerant_flow_gs,
+        cop: data.system_status.cop,
+        mode: data.system_status.mode,
+        fanSpeed: data.system_status.fan_speed,
+        humidity: data.system_status.humidity,
+        timeToTarget: data.system_status.time_to_target,
+        canReachTarget: data.system_status.can_reach_target,
+        tempChangeRate: data.system_status.temp_change_rate,
+        ratedPowerKw: data.system_status.rated_power_kw
+      }));
+
+      setTemperatureData(prev => [
+        ...prev,
+        {
+          time: new Date().toLocaleTimeString(),
+          temperature: data.system_status.room_temperature,
+          target: roomParameters.targetTemp,
+        }
+      ].slice(-20));
+    }
+  };
+
+  // WebSocket setup effect
+  useEffect(() => {
+    const websocket = new WebSocket(
+      "ws://localhost:8000/ws?system_type=vrf-system&client_id=vrf_system_client"
+    );
+
+    websocket.onopen = () => {
+      setIsConnected(true);
+      console.log("Connected to VRF system simulator");
+    };
+
+    websocket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        handleWebSocketMessage(data);
+      } catch (error) {
+        console.error("Error processing WebSocket message:", error);
+      }
+    };
+
+    websocket.onclose = () => {
+      setIsConnected(false);
+      console.log("Disconnected from VRF system simulator");
+    };
+
+    setWs(websocket);
+
+    return () => websocket.close();
+  }, []);
+
+  // Parameter change handlers
+  const handleRoomParameterChange = (parameter) => (event, value) => {
+    const newValue = value ?? event.target.value;
+    setRoomParameters(prev => ({ ...prev, [parameter]: newValue }));
+    ws?.send(JSON.stringify({
+      type: "room_parameters",
+      data: { [parameter]: newValue }
+    }));
+  };
+
+  const handleHVACParameterChange = (parameter) => (event, value) => {
+    const newValue = value ?? event.target.value;
+    setHvacParameters(prev => ({ ...prev, [parameter]: newValue }));
+    ws?.send(JSON.stringify({
+      type: "hvac_parameters",
+      data: { [parameter]: newValue }
+    }));
+  };
+
+  // Add new status cards for additional parameters
+  const additionalStatusCards = [
+    {
+      title: "Heat Gain",
+      value: (systemStatus.heatGainW / 1000).toFixed(2),
+      unit: "kW",
+      icon: <LocalFireDepartment sx={{ fontSize: 48, color: theme.palette.primary.main }} />
+    },
+    {
+      title: "Room Size",
+      value: systemStatus.roomSize.toFixed(1),
+      unit: "m²",
+      icon: <AspectRatio sx={{ fontSize: 48, color: theme.palette.primary.main }} />
+    },
+    {
+      title: "Temperature Change",
+      value: systemStatus.tempChangeRate.toFixed(2),
+      unit: "°C/hr",
+      icon: <TrendingUp sx={{ fontSize: 48, color: theme.palette.primary.main }} />
+    },
+    {
+      title: "Humidity",
+      value: systemStatus.humidity.toFixed(1),
+      unit: "%",
+      icon: <WaterDrop sx={{ fontSize: 48, color: theme.palette.primary.main }} />
+    }
+  ];
+
+  // Add status cards for new parameters
+  const statusCards = [
+    // ...existing status cards...
+    {
+      title: "Mode",
+      value: systemStatus.mode.charAt(0).toUpperCase() + systemStatus.mode.slice(1),
+      unit: "",
+      icon: <ThermostatAuto sx={{ fontSize: 48, color: theme.palette.primary.main }} />
+    },
+    {
+      title: "Heat Balance",
+      value: (systemStatus.heatGainW / 1000).toFixed(2),
+      unit: "kW",
+      icon: <LocalFireDepartment sx={{ fontSize: 48, color: theme.palette.primary.main }} />
+    },
+    {
+      title: "Capacity",
+      value: systemStatus.coolingCapacityKw.toFixed(2),
+      unit: "kW",
+      icon: <Power sx={{ fontSize: 48, color: theme.palette.primary.main }} />
+    }
+  ];
+
+  // Fix simulation control by removing dispatch
+  const handleSimulationControl = (action) => {
+    const message = {
+      type: "simulation_control",
+      data: { action }
+    };
+    ws?.send(JSON.stringify(message));
+    if (action === "pause" || action === "resume") {
+      setIsSimulationPaused(prev => !prev);
+    }
+  };
+
+  // ... rest of your existing code (StatusCard component, render method, etc.)
 
   return (
     <Box
@@ -698,20 +790,13 @@ const SimulationPage = () => {
                     ) : null
                   }
                   onClick={() => {
-                    const message = {
-                      type: "simulation_control",
-                      data: {
-                        action: isSimulationRunning
-                          ? isSimulationPaused
-                            ? "resume"
-                            : "pause"
-                          : "start",
-                      },
-                    };
-                    ws?.send(JSON.stringify(message));
-                    if (isSimulationRunning) {
-                      dispatch(setSimulationPaused(!isSimulationPaused));
-                    }
+                    handleSimulationControl(
+                      isSimulationRunning
+                        ? isSimulationPaused
+                          ? "resume"
+                          : "pause"
+                        : "start"
+                    );
                   }}
                   sx={{
                     px: 6,
@@ -806,4 +891,5 @@ const SimulationPage = () => {
   );
 };
 
-export default SimulationPage;
+// Fix export name to match component name
+export default VRFPage;

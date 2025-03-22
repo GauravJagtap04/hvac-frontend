@@ -18,6 +18,8 @@ import {
   Chip,
   useTheme,
   alpha,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import {
   LineChart,
@@ -63,6 +65,7 @@ const SimulationPage = () => {
   const [estimatedTime, setEstimatedTime] = useState(0);
   const [countdownTime, setCountdownTime] = useState(0);
   const [canReachTarget, setCanReachTarget] = useState(true);
+  const [targetReachAlert, setTargetReachAlert] = useState(false);
 
   useEffect(() => {
     let timer;
@@ -73,6 +76,30 @@ const SimulationPage = () => {
     }
     return () => clearInterval(timer);
   }, [isSimulationRunning, isSimulationPaused, countdownTime]);
+
+  useEffect(() => {
+    if (isSimulationRunning && !isSimulationPaused) {
+      const currentTemp = systemStatus.roomTemperature;
+      const targetTemp = systemStatus.targetTemperature;
+
+      if (Math.abs(currentTemp - targetTemp) == 0) {
+        setTargetReachAlert(true);
+        ws?.send(
+          JSON.stringify({
+            type: "simulation_control",
+            data: { action: "stop" },
+          })
+        );
+        dispatch(setSimulationStatus(false));
+        dispatch(setSimulationPaused(false));
+      }
+    }
+  }, [
+    systemStatus.roomTemperature,
+    roomParameters.targetTemp,
+    isSimulationRunning,
+    isSimulationPaused,
+  ]);
 
   useEffect(() => {
     const websocket = new WebSocket(
@@ -1015,6 +1042,20 @@ const SimulationPage = () => {
           </Paper>
         </Grid>
       </Grid>
+      <Snackbar
+        open={targetReachAlert}
+        autoHideDuration={6000}
+        onClose={() => setTargetReachAlert(false)}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert
+          severity="success"
+          variant="filled"
+          onClose={() => setTargetReachAlert(false)}
+        >
+          Target temperature reached! Simulation successful.
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

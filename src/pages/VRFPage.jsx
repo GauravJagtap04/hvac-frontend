@@ -15,6 +15,8 @@ import {
   Chip,
   useTheme,
   alpha,
+  FormControlLabel,
+  Switch,
 } from "@mui/material";
 import {
   LineChart,
@@ -82,49 +84,52 @@ const VRFPage = () => {
     length: 10.0,
     breadth: 8.0,
     height: 3.0,
-    currentTemp: 25.0,
-    targetTemp: 23.0,
-    externalTemp: 35.0,
-    wallInsulation: "medium",
+    current_temp: 25.0,
+    target_temp: 23.0,
+    external_temp: 35.0,
+    wall_insulation: "medium",
     humidity: 50.0,
-    numPeople: 0,
-    heatGainExternal: 0.0,
+    num_people: 0,
+    heat_gain_external: 0.0,
     mode: "cooling"
   });
 
   // HVAC Parameters State - matching VRFHVACParameters
   const [hvacParameters, setHvacParameters] = useState({
-    power: 5.0,
+    max_capacity_kw: 10.0,
+    min_capacity_kw: 2.0,
     cop: 3.0,
-    airFlowRate: 0.5,
-    supplyTemp: 12.0,
-    fanSpeed: 100.0,
-    timeInterval: 1.0
+    zones: { "main": 5.0 },
+    heat_recovery: false,
+    air_flow_rate: 0.5,
+    supply_temp: 12.0,
+    fan_speed: 100.0,
+    time_interval: 1.0
   });
 
   // System Status State - matching get_system_status output
   const [systemStatus, setSystemStatus] = useState({
-    roomTemperature: 25.0,
-    targetTemperature: 23.0,
-    coolingCapacityKw: 0,
-    coolingCapacityBtu: 0,
-    energyConsumptionW: 0,
-    refrigerantFlowGs: 0,
-    heatGainW: 0,
+    room_temperature: 25.0,
+    target_temperature: 23.0,
+    cooling_capacity_kw: 0,
+    cooling_capacity_btu: 0,
+    energy_consumption_w: 0,
+    refrigerant_flow_gs: 0,
+    heat_gain_w: 0,
     cop: 3.0,
     mode: "cooling",
-    fanSpeed: 100,
+    fan_speed: 100,
     humidity: 50,
-    numPeople: 0,
-    externalHeatGain: 0,
-    insulationLevel: "medium",
-    timeInterval: 1.0,
-    roomSize: 80,
-    externalTemperature: 35,
-    timeToTarget: 0,
-    canReachTarget: true,
-    tempChangeRate: 0,
-    ratedPowerKw: 5
+    num_people: 0,
+    external_heat_gain: 0,
+    insulation_level: "medium",
+    time_interval: 1.0,
+    room_size: 80,
+    external_temperature: 35,
+    time_to_target: 0,
+    can_reach_target: true,
+    temp_change_rate: 0,
+    rated_power_kw: 5
   });
 
   // ... existing state for temperature data, websocket, etc.
@@ -132,6 +137,9 @@ const VRFPage = () => {
   const [ws, setWs] = useState(null);
   const [estimatedTime, setEstimatedTime] = useState(0);
   const [countdownTime, setCountdownTime] = useState(0);
+
+  // Add this helper function near the top of the VRFPage component
+  const isInputDisabled = () => isSimulationRunning && !isSimulationPaused;
 
   // WebSocket message handler
   const handleWebSocketMessage = (data) => {
@@ -143,20 +151,20 @@ const VRFPage = () => {
     } else if (data.system_status) {
       setSystemStatus(prevStatus => ({
         ...prevStatus,
-        roomTemperature: data.system_status.room_temperature,
-        coolingCapacityKw: data.system_status.cooling_capacity_kw,
-        coolingCapacityBtu: data.system_status.cooling_capacity_btu,
-        energyConsumptionW: data.system_status.energy_consumption_w,
-        heatGainW: data.system_status.heat_gain_w,
-        refrigerantFlowGs: data.system_status.refrigerant_flow_gs,
+        room_temperature: data.system_status.room_temperature,
+        cooling_capacity_kw: data.system_status.cooling_capacity_kw,
+        cooling_capacity_btu: data.system_status.cooling_capacity_btu,
+        energy_consumption_w: data.system_status.energy_consumption_w,
+        heat_gain_w: data.system_status.heat_gain_w,
+        refrigerant_flow_gs: data.system_status.refrigerant_flow_gs,
         cop: data.system_status.cop,
         mode: data.system_status.mode,
-        fanSpeed: data.system_status.fan_speed,
+        fan_speed: data.system_status.fan_speed,
         humidity: data.system_status.humidity,
-        timeToTarget: data.system_status.time_to_target,
-        canReachTarget: data.system_status.can_reach_target,
-        tempChangeRate: data.system_status.temp_change_rate,
-        ratedPowerKw: data.system_status.rated_power_kw
+        time_to_target: data.system_status.time_to_target,
+        can_reach_target: data.system_status.can_reach_target,
+        temp_change_rate: data.system_status.temp_change_rate,
+        rated_power_kw: data.system_status.rated_power_kw
       }));
 
       setTemperatureData(prev => [
@@ -164,7 +172,7 @@ const VRFPage = () => {
         {
           time: new Date().toLocaleTimeString(),
           temperature: data.system_status.room_temperature,
-          target: roomParameters.targetTemp,
+          target: roomParameters.target_temp,
         }
       ].slice(-20));
     }
@@ -206,7 +214,10 @@ const VRFPage = () => {
     setRoomParameters(prev => ({ ...prev, [parameter]: newValue }));
     ws?.send(JSON.stringify({
       type: "room_parameters",
-      data: { [parameter]: newValue }
+      data: { 
+        ...roomParameters,
+        [parameter]: newValue
+      }
     }));
   };
 
@@ -215,7 +226,10 @@ const VRFPage = () => {
     setHvacParameters(prev => ({ ...prev, [parameter]: newValue }));
     ws?.send(JSON.stringify({
       type: "hvac_parameters",
-      data: { [parameter]: newValue }
+      data: {
+        ...hvacParameters,
+        [parameter]: newValue
+      }
     }));
   };
 
@@ -223,19 +237,19 @@ const VRFPage = () => {
   const additionalStatusCards = [
     {
       title: "Heat Gain",
-      value: (systemStatus.heatGainW / 1000).toFixed(2),
+      value: (systemStatus.heat_gain_w / 1000).toFixed(2),
       unit: "kW",
       icon: <LocalFireDepartment sx={{ fontSize: 48, color: theme.palette.primary.main }} />
     },
     {
       title: "Room Size",
-      value: systemStatus.roomSize.toFixed(1),
+      value: systemStatus.room_size.toFixed(1),
       unit: "m²",
       icon: <AspectRatio sx={{ fontSize: 48, color: theme.palette.primary.main }} />
     },
     {
       title: "Temperature Change",
-      value: systemStatus.tempChangeRate.toFixed(2),
+      value: systemStatus.temp_change_rate.toFixed(2),
       unit: "°C/hr",
       icon: <TrendingUp sx={{ fontSize: 48, color: theme.palette.primary.main }} />
     },
@@ -258,13 +272,13 @@ const VRFPage = () => {
     },
     {
       title: "Heat Balance",
-      value: (systemStatus.heatGainW / 1000).toFixed(2),
+      value: (systemStatus.heat_gain_w / 1000).toFixed(2),
       unit: "kW",
       icon: <LocalFireDepartment sx={{ fontSize: 48, color: theme.palette.primary.main }} />
     },
     {
       title: "Capacity",
-      value: systemStatus.coolingCapacityKw.toFixed(2),
+      value: systemStatus.cooling_capacity_kw.toFixed(2),
       unit: "kW",
       icon: <Power sx={{ fontSize: 48, color: theme.palette.primary.main }} />
     }
@@ -331,7 +345,7 @@ const VRFPage = () => {
         <Grid item xs={12} md={3}>
           <StatusCard
             title="Room Temperature"
-            value={systemStatus.roomTemperature.toFixed(1)}
+            value={systemStatus.room_temperature.toFixed(1)}
             unit="°C"
             icon={
               <ThermostatAuto
@@ -344,7 +358,7 @@ const VRFPage = () => {
         <Grid item xs={12} md={3}>
           <StatusCard
             title="Energy Usage"
-            value={(systemStatus.energyConsumptionW / 1000).toFixed(2)}
+            value={(systemStatus.energy_consumption_w / 1000).toFixed(2)}
             unit="kW"
             icon={
               <Power sx={{ fontSize: 48, color: theme.palette.primary.main }} />
@@ -366,7 +380,7 @@ const VRFPage = () => {
         <Grid item xs={12} md={3}>
           <StatusCard
             title="Refrigerant Flow"
-            value={systemStatus.refrigerantFlowGs.toFixed(1)}
+            value={systemStatus.refrigerant_flow_gs.toFixed(1)}
             unit="g/s"
             icon={
               <Opacity
@@ -431,7 +445,7 @@ const VRFPage = () => {
                 />
                 <Line
                   type="monotone"
-                  dataKey={(dataPoint) => roomParameters.targetTemp}
+                  dataKey={(dataPoint) => roomParameters.target_temp}
                   stroke={theme.palette.secondary.main}
                   name="Target Temperature"
                   strokeWidth={2}
@@ -489,6 +503,7 @@ const VRFPage = () => {
                       },
                     },
                   }}
+                  disabled={isInputDisabled()}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -514,6 +529,7 @@ const VRFPage = () => {
                       },
                     },
                   }}
+                  disabled={isInputDisabled()}
                 />
               </Grid>
 
@@ -540,6 +556,7 @@ const VRFPage = () => {
                       },
                     },
                   }}
+                  disabled={isInputDisabled()}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -547,9 +564,9 @@ const VRFPage = () => {
                   fullWidth
                   label="No. of People"
                   type="number"
-                  value={roomParameters.numPeople}
+                  value={roomParameters.num_people}
                   onChange={(e) =>
-                    handleRoomParameterChange("numPeople")(
+                    handleRoomParameterChange("num_people")(
                       e,
                       parseFloat(e.target.value)
                     )
@@ -565,6 +582,7 @@ const VRFPage = () => {
                       },
                     },
                   }}
+                  disabled={isInputDisabled()}
                 />
               </Grid>
 
@@ -581,6 +599,7 @@ const VRFPage = () => {
                       },
                     },
                   }}
+                  disabled={isInputDisabled()}
                 >
                   <InputLabel
                     sx={{
@@ -595,6 +614,7 @@ const VRFPage = () => {
                     onChange={(e) =>
                       handleRoomParameterChange("mode")(e, e.target.value)
                     }
+                    disabled={isInputDisabled()}
                   >
                     <MenuItem value="cooling">Cooling</MenuItem>
                     <MenuItem value="heating">Heating</MenuItem>
@@ -614,6 +634,7 @@ const VRFPage = () => {
                       },
                     },
                   }}
+                  disabled={isInputDisabled()}
                 >
                   <InputLabel
                     sx={{
@@ -624,13 +645,14 @@ const VRFPage = () => {
                     Wall Insulation Level
                   </InputLabel>
                   <Select
-                    value={roomParameters.wallInsulation}
+                    value={roomParameters.wall_insulation}
                     onChange={(e) =>
-                      handleRoomParameterChange("wallInsulation")(
+                      handleRoomParameterChange("wall_insulation")(
                         e,
                         e.target.value
                       )
                     }
+                    disabled={isInputDisabled()}
                   >
                     <MenuItem value="low">Low</MenuItem>
                     <MenuItem value="medium">Medium</MenuItem>
@@ -641,46 +663,49 @@ const VRFPage = () => {
 
               <Grid item xs={12}>
                 <Typography gutterBottom>
-                  Current Room Temperature: {roomParameters.currentTemp}°C
+                  Current Room Temperature: {roomParameters.current_temp}°C
                 </Typography>
                 <Slider
-                  value={roomParameters.currentTemp}
-                  onChange={handleRoomParameterChange("currentTemp")}
+                  value={roomParameters.current_temp}
+                  onChange={handleRoomParameterChange("current_temp")}
                   min={10}
                   max={40}
                   step={0.5}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isInputDisabled()}
                 />
               </Grid>
 
               <Grid item xs={12}>
                 <Typography gutterBottom>
-                  Target Temperature: {roomParameters.targetTemp}°C
+                  Target Temperature: {roomParameters.target_temp}°C
                 </Typography>
                 <Slider
-                  value={roomParameters.targetTemp}
-                  onChange={handleRoomParameterChange("targetTemp")}
+                  value={roomParameters.target_temp}
+                  onChange={handleRoomParameterChange("target_temp")}
                   min={16}
                   max={30}
                   step={0.5}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isInputDisabled()}
                 />
               </Grid>
 
               <Grid item xs={12}>
                 <Typography gutterBottom>
-                  External Temperature: {roomParameters.externalTemp}°C
+                  External Temperature: {roomParameters.external_temp}°C
                 </Typography>
                 <Slider
-                  value={roomParameters.externalTemp}
-                  onChange={handleRoomParameterChange("externalTemp")}
+                  value={roomParameters.external_temp}
+                  onChange={handleRoomParameterChange("external_temp")}
                   min={-10}
                   max={45}
                   step={0.5}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isInputDisabled()}
                 />
               </Grid>
             </Grid>
@@ -712,46 +737,161 @@ const VRFPage = () => {
             <Grid container spacing={4}>
               <Grid item xs={12}>
                 <Typography gutterBottom>
-                  Power: {hvacParameters.power} kW
+                  Maximum Capacity: {hvacParameters.max_capacity_kw} kW
                 </Typography>
                 <Slider
-                  value={hvacParameters.power}
-                  onChange={handleHVACParameterChange("power")}
+                  value={hvacParameters.max_capacity_kw}
+                  onChange={handleHVACParameterChange("max_capacity_kw")}
                   min={1}
                   max={10}
                   step={0.5}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isInputDisabled()}
                 />
               </Grid>
 
               <Grid item xs={12}>
                 <Typography gutterBottom>
-                  Airflow Rate: {hvacParameters.airFlowRate} m³/s
+                  Minimum Capacity: {hvacParameters.min_capacity_kw} kW
                 </Typography>
                 <Slider
-                  value={hvacParameters.airFlowRate}
-                  onChange={handleHVACParameterChange("airFlowRate")}
+                  value={hvacParameters.min_capacity_kw}
+                  onChange={handleHVACParameterChange("min_capacity_kw")}
+                  min={0.5}
+                  max={5}
+                  step={0.5}
+                  marks
+                  valueLabelDisplay="auto"
+                  disabled={isInputDisabled()}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  COP (Coefficient of Performance): {hvacParameters.cop}
+                </Typography>
+                <Slider
+                  value={hvacParameters.cop}
+                  onChange={handleHVACParameterChange("cop")}
+                  min={1}
+                  max={5}
+                  step={0.1}
+                  marks
+                  valueLabelDisplay="auto"
+                  disabled={isInputDisabled()}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>Zone Load Configuration</Typography>
+                {Object.entries(hvacParameters.zones).map(([zone, load]) => (
+                  <Box key={zone} sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <TextField
+                      label={`${zone} Zone`}
+                      type="number"
+                      value={load}
+                      onChange={(e) => {
+                        const newZones = {
+                          ...hvacParameters.zones,
+                          [zone]: parseFloat(e.target.value)
+                        };
+                        handleHVACParameterChange("zones")({ target: { value: newZones } });
+                      }}
+                      inputProps={{ step: 0.1, min: 0 }}
+                      sx={{
+                        flexGrow: 1,
+                        "& .MuiOutlinedInput-root": {
+                          "& fieldset": {
+                            borderColor: alpha(theme.palette.primary.main, 0.2),
+                          },
+                          "&:hover fieldset": {
+                            borderColor: alpha(theme.palette.primary.main, 0.3),
+                          },
+                        },
+                      }}
+                      disabled={isInputDisabled()}
+                    />
+                    <Typography>kW</Typography>
+                  </Box>
+                ))}
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    const zoneName = `Zone ${Object.keys(hvacParameters.zones).length + 1}`;
+                    const newZones = {
+                      ...hvacParameters.zones,
+                      [zoneName]: 0
+                    };
+                    handleHVACParameterChange("zones")({ target: { value: newZones } });
+                  }}
+                  sx={{ mt: 2 }}
+                  disabled={isInputDisabled()}
+                >
+                  Add Zone
+                </Button>
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Supply Temperature: {hvacParameters.supply_temp}°C
+                </Typography>
+                <Slider
+                  value={hvacParameters.supply_temp}
+                  onChange={handleHVACParameterChange("supply_temp")}
+                  min={5}
+                  max={30}
+                  step={0.5}
+                  marks
+                  valueLabelDisplay="auto"
+                  disabled={isInputDisabled()}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Airflow Rate: {hvacParameters.air_flow_rate} m³/s
+                </Typography>
+                <Slider
+                  value={hvacParameters.air_flow_rate}
+                  onChange={handleHVACParameterChange("air_flow_rate")}
                   min={0.1}
                   max={2.0}
                   step={0.1}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isInputDisabled()}
                 />
               </Grid>
 
               <Grid item xs={12}>
                 <Typography gutterBottom>
-                  Fan Speed: {hvacParameters.fanSpeed}%
+                  Fan Speed: {hvacParameters.fan_speed}%
                 </Typography>
                 <Slider
-                  value={hvacParameters.fanSpeed}
-                  onChange={handleHVACParameterChange("fanSpeed")}
+                  value={hvacParameters.fan_speed}
+                  onChange={handleHVACParameterChange("fan_speed")}
                   min={0}
                   max={100}
                   step={1}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={isInputDisabled()}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={hvacParameters.heat_recovery}
+                      onChange={(e) => handleHVACParameterChange("heat_recovery")(e, e.target.checked)}
+                      color="primary"
+                      disabled={isInputDisabled()}
+                    />
+                  }
+                  label="Heat Recovery"
+                  sx={{ mt: 2 }}
                 />
               </Grid>
             </Grid>

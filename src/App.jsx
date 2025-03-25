@@ -21,9 +21,8 @@ import TrainingPage from "./pages/TrainingPage";
 import SettingsPage from "./pages/SettingsPage";
 
 // Create router with all routes
-import ProtectedRoute from './components/ProtectedRoute';
-
-// ...existing imports...
+import ProtectedRoute from "./components/ProtectedRoute";
+import { AuthProvider } from "./context/AuthContext";
 
 const router = createBrowserRouter(
   createRoutesFromElements(
@@ -63,9 +62,11 @@ const router = createBrowserRouter(
 
 const App = () => {
   return (
-    <Provider store={store}>
-      <RouterProvider router={router} />
-    </Provider>
+    <AuthProvider>
+      <Provider store={store}>
+        <RouterProvider router={router} />
+      </Provider>
+    </AuthProvider>
   );
 };
 

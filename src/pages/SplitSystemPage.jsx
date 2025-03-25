@@ -47,6 +47,7 @@ import {
   setSimulationPaused,
 } from "../store/store";
 import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const SYSTEM_TYPE = "splitSystem";
 
@@ -59,6 +60,46 @@ const SimulationPage = () => {
   const { roomParameters, hvacParameters, systemStatus } = useSelector(
     (state) => state.hvac.systems[SYSTEM_TYPE]
   );
+
+  const { user, session } = useAuth();
+
+  const updateSimulationParameters = async (parameters) => {
+    if (!session || !user) {
+      console.error("No authenticated user found");
+      return;
+    }
+
+    const auth_id = user.id;
+
+    const urlSystemType = SYSTEM_TYPE.replace(
+      /([a-z])([A-Z])/g,
+      "$1-$2"
+    ).toLowerCase();
+
+    try {
+      const response = await fetch(
+        `/api/${auth_id}/simulations/${urlSystemType}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(parameters),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Error updating simulation parameters:", error);
+      throw error;
+    }
+  };
 
   const [temperatureData, setTemperatureData] = useState([]);
   const [ws, setWs] = useState(null);
@@ -101,97 +142,155 @@ const SimulationPage = () => {
   ]);
 
   useEffect(() => {
-    const websocket = new WebSocket(
-      "ws://localhost:8000/ws?system_type=split-system"
-    );
+    const connectWebSocket = async () => {
+      if (!session || !user) {
+        console.error("No authenticated user found");
+        return;
+      }
 
-    websocket.onopen = () => {
-      dispatch(setConnectionStatus(true));
-      console.log("Connected to split system HVAC simulator");
-    };
+      const auth_id = user.id;
+      const tokenValue = session.access_token;
 
-    websocket.onmessage = (event) => {
-      try {
+      const urlSystemType = SYSTEM_TYPE.replace(
+        /([a-z])([A-Z])/g,
+        "$1-$2"
+      ).toLowerCase();
+
+      // Connect to the user-specific WebSocket endpoint
+      const wsUrl = `ws://localhost:8000/ws/${auth_id}/${urlSystemType}?token=${tokenValue}`;
+      const socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        console.log("WebSocket connection established");
+        setWs(socket);
+        dispatch(setConnectionStatus(true));
+
+        // Initialize simulation with current parameters
+        updateSimulationParameters({
+          ...roomParameters,
+          ...hvacParameters,
+        });
+      };
+
+      socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
         console.log("Received websocket data:", data); // Debug logging
 
-        // Handle simulation control responses
-        if (data.type === "simulation_status") {
-          dispatch(setSimulationStatus(data.data.isRunning));
-          dispatch(setSimulationPaused(data.data.isPaused));
-          if (data.data.estimatedTimeToTarget) {
-            setEstimatedTime(data.data.estimatedTimeToTarget);
-            setCountdownTime(data.data.estimatedTimeToTarget);
+        try {
+          // Handle simulation control responses
+          if (data.type === "simulation_status") {
+            dispatch(setSimulationStatus(data.data.isRunning));
+            dispatch(setSimulationPaused(data.data.isPaused));
+            if (data.data.estimatedTimeToTarget) {
+              setEstimatedTime(data.data.estimatedTimeToTarget);
+              setCountdownTime(data.data.estimatedTimeToTarget);
+            }
           }
-        }
-        // Handle temperature+status updates from main loop
-        else if (data.system_status) {
-          // Mapping backend snake_case to frontend camelCase
-          dispatch(
-            updateSystemStatus({
-              system: SYSTEM_TYPE,
-              status: {
-                roomTemperature: data.system_status.room_temperature,
-                targetTemperature: data.system_status.target_temperature,
-                coolingCapacityKw: data.system_status.cooling_capacity_kw,
-                coolingCapacityBtu: data.system_status.cooling_capacity_btu,
-                energyConsumptionW: data.system_status.energy_consumption_w,
-                refrigerantFlowGs: data.system_status.refrigerant_flow_gs,
-                heatGainW: data.system_status.heat_gain_w,
-                cop: data.system_status.cop,
-              },
-            })
-          );
+          // Handle temperature+status updates from main loop
+          else if (data.system_status) {
+            // Mapping backend snake_case to frontend camelCase
+            dispatch(
+              updateSystemStatus({
+                system: SYSTEM_TYPE,
+                status: {
+                  roomTemperature: data.system_status.room_temperature,
+                  targetTemperature: data.system_status.target_temperature,
+                  coolingCapacityKw: data.system_status.cooling_capacity_kw,
+                  coolingCapacityBtu: data.system_status.cooling_capacity_btu,
+                  energyConsumptionW: data.system_status.energy_consumption_w,
+                  refrigerantFlowGs: data.system_status.refrigerant_flow_gs,
+                  heatGainW: data.system_status.heat_gain_w,
+                  cop: data.system_status.cop,
+                },
+              })
+            );
 
-          // Add temperature data point
-          setTemperatureData((prev) =>
-            [
-              ...prev,
-              {
-                time: new Date().toLocaleTimeString(),
-                temperature: data.system_status.room_temperature,
-              },
-            ].slice(-20)
-          );
-        } else if (data.temperature) {
-          // Handle simple temperature updates
-          setTemperatureData((prev) =>
-            [
-              ...prev,
-              {
-                time: new Date().toLocaleTimeString(),
-                temperature: data.temperature,
-              },
-            ].slice(-20)
-          );
+            // Add temperature data point
+            setTemperatureData((prev) =>
+              [
+                ...prev,
+                {
+                  time: new Date().toLocaleTimeString(),
+                  temperature: data.system_status.room_temperature,
+                },
+              ].slice(-20)
+            );
+          } else if (data.temperature) {
+            // Handle simple temperature updates
+            setTemperatureData((prev) =>
+              [
+                ...prev,
+                {
+                  time: new Date().toLocaleTimeString(),
+                  temperature: data.temperature,
+                },
+              ].slice(-20)
+            );
+          }
+        } catch (error) {
+          console.error("Error processing WebSocket message:", error);
         }
-      } catch (error) {
-        console.error("Error processing WebSocket message:", error);
-      }
+      };
+
+      socket.onclose = (event) => {
+        console.log("WebSocket connection closed:", event);
+        dispatch(setConnected(false));
+        setWs(null);
+
+        // Attempt to reconnect after a delay
+        setTimeout(connectWebSocket, 3000);
+      };
+
+      socket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+      };
     };
 
-    websocket.onclose = () => {
-      dispatch(setConnectionStatus(false));
-      console.log("Disconnected from split system HVAC simulator");
-    };
-
-    setWs(websocket);
+    connectWebSocket();
 
     return () => {
-      websocket.close();
+      if (ws) {
+        ws.close();
+      }
     };
-  }, [dispatch]);
+  }, [dispatch, session, user]);
 
   const handleRoomParameterChange = (parameter) => (event, value) => {
     const update = { [parameter]: value };
-    dispatch(updateRoomParameters({ system: SYSTEM_TYPE, parameters: update }));
+    dispatch(
+      updateRoomParameters({
+        system: SYSTEM_TYPE,
+        parameters: update,
+      })
+    );
+
+    // Use WebSocket for real-time updates
     ws?.send(JSON.stringify({ type: "room_parameters", data: update }));
+
+    // Also send to REST API to persist changes
+    updateSimulationParameters({
+      ...roomParameters,
+      ...update,
+    });
   };
 
   const handleHVACParameterChange = (parameter) => (event, value) => {
     const update = { [parameter]: value };
-    dispatch(updateHVACParameters({ system: SYSTEM_TYPE, parameters: update }));
+    dispatch(
+      updateHVACParameters({
+        system: SYSTEM_TYPE.replace("-", ""),
+        parameters: update,
+      })
+    );
+
+    // Use WebSocket for real-time updates
     ws?.send(JSON.stringify({ type: "hvac_parameters", data: update }));
+
+    // Also send to REST API to persist changes
+    updateSimulationParameters({
+      ...hvacParameters,
+      ...update,
+    });
   };
 
   const StatusCard = ({ title, value, unit, icon }) => (

@@ -106,6 +106,7 @@ const SimulationPage = () => {
   const [estimatedTime, setEstimatedTime] = useState(0);
   const [countdownTime, setCountdownTime] = useState(0);
   const [targetReachAlert, setTargetReachAlert] = useState(false);
+  const [connected, setConnected] = useState(false);
 
   useEffect(() => {
     let timer;
@@ -143,117 +144,129 @@ const SimulationPage = () => {
 
   useEffect(() => {
     const connectWebSocket = async () => {
-      if (!session || !user) {
-        console.error("No authenticated user found");
-        return;
-      }
-
-      const auth_id = user.id;
-      const tokenValue = session.access_token;
+      if (!session?.access_token) return;
 
       const urlSystemType = SYSTEM_TYPE.replace(
         /([a-z])([A-Z])/g,
         "$1-$2"
       ).toLowerCase();
 
-      // Connect to the user-specific WebSocket endpoint
-      const wsUrl = `ws://localhost:8000/ws/${auth_id}/${urlSystemType}?token=${tokenValue}`;
+      const wsUrl = `ws://localhost:8000/ws/${user.id}/${urlSystemType}?token=${session.access_token}`;
       const socket = new WebSocket(wsUrl);
 
-      socket.onopen = () => {
+      socket.onopen = async () => {
         console.log("WebSocket connection established");
         setWs(socket);
+        setConnected(true);
         dispatch(setConnectionStatus(true));
 
-        // Initialize simulation with current parameters
-        updateSimulationParameters({
-          ...roomParameters,
-          ...hvacParameters,
-        });
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(
+            JSON.stringify({
+              type: "room_parameters",
+              data: roomParameters,
+            })
+          );
+
+          socket.send(
+            JSON.stringify({
+              type: "hvac_parameters",
+              data: hvacParameters,
+            })
+          );
+
+          // Initialize simulation with current parameters
+          await updateSimulationParameters({
+            ...roomParameters,
+            ...hvacParameters,
+          });
+        }
+
+        socket.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          console.log("Received websocket data:", data); // Debug logging
+
+          try {
+            // Handle simulation control responses
+            if (data.type === "simulation_status") {
+              dispatch(setSimulationStatus(data.data.isRunning));
+              dispatch(setSimulationPaused(data.data.isPaused));
+              if (data.data.estimatedTimeToTarget) {
+                setEstimatedTime(data.data.estimatedTimeToTarget);
+                setCountdownTime(data.data.estimatedTimeToTarget);
+              }
+            }
+            // Handle temperature+status updates from main loop
+            else if (data.system_status) {
+              // Mapping backend snake_case to frontend camelCase
+              dispatch(
+                updateSystemStatus({
+                  system: SYSTEM_TYPE,
+                  status: {
+                    roomTemperature: data.system_status.room_temperature,
+                    targetTemperature: data.system_status.target_temperature,
+                    coolingCapacityKw: data.system_status.cooling_capacity_kw,
+                    coolingCapacityBtu: data.system_status.cooling_capacity_btu,
+                    energyConsumptionW: data.system_status.energy_consumption_w,
+                    refrigerantFlowGs: data.system_status.refrigerant_flow_gs,
+                    heatGainW: data.system_status.heat_gain_w,
+                    cop: data.system_status.cop,
+                  },
+                })
+              );
+
+              // Add temperature data point
+              setTemperatureData((prev) =>
+                [
+                  ...prev,
+                  {
+                    time: new Date().toLocaleTimeString(),
+                    temperature: data.system_status.room_temperature,
+                  },
+                ].slice(-20)
+              );
+            } else if (data.temperature) {
+              // Handle simple temperature updates
+              setTemperatureData((prev) =>
+                [
+                  ...prev,
+                  {
+                    time: new Date().toLocaleTimeString(),
+                    temperature: data.temperature,
+                  },
+                ].slice(-20)
+              );
+            }
+          } catch (error) {
+            console.error("Error processing WebSocket message:", error);
+          }
+        };
+
+        socket.onclose = (event) => {
+          console.log("WebSocket connection closed:", event);
+          setConnected(false);
+          dispatch(setConnectionStatus(false));
+          setWs(null);
+
+          // Attempt to reconnect after a delay
+          setTimeout(connectWebSocket, 3000);
+        };
+
+        socket.onerror = (error) => {
+          console.error("WebSocket error:", error);
+          setConnected(false);
+          dispatch(setConnectionStatus(false));
+        };
       };
 
-      socket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        console.log("Received websocket data:", data); // Debug logging
-
-        try {
-          // Handle simulation control responses
-          if (data.type === "simulation_status") {
-            dispatch(setSimulationStatus(data.data.isRunning));
-            dispatch(setSimulationPaused(data.data.isPaused));
-            if (data.data.estimatedTimeToTarget) {
-              setEstimatedTime(data.data.estimatedTimeToTarget);
-              setCountdownTime(data.data.estimatedTimeToTarget);
-            }
-          }
-          // Handle temperature+status updates from main loop
-          else if (data.system_status) {
-            // Mapping backend snake_case to frontend camelCase
-            dispatch(
-              updateSystemStatus({
-                system: SYSTEM_TYPE,
-                status: {
-                  roomTemperature: data.system_status.room_temperature,
-                  targetTemperature: data.system_status.target_temperature,
-                  coolingCapacityKw: data.system_status.cooling_capacity_kw,
-                  coolingCapacityBtu: data.system_status.cooling_capacity_btu,
-                  energyConsumptionW: data.system_status.energy_consumption_w,
-                  refrigerantFlowGs: data.system_status.refrigerant_flow_gs,
-                  heatGainW: data.system_status.heat_gain_w,
-                  cop: data.system_status.cop,
-                },
-              })
-            );
-
-            // Add temperature data point
-            setTemperatureData((prev) =>
-              [
-                ...prev,
-                {
-                  time: new Date().toLocaleTimeString(),
-                  temperature: data.system_status.room_temperature,
-                },
-              ].slice(-20)
-            );
-          } else if (data.temperature) {
-            // Handle simple temperature updates
-            setTemperatureData((prev) =>
-              [
-                ...prev,
-                {
-                  time: new Date().toLocaleTimeString(),
-                  temperature: data.temperature,
-                },
-              ].slice(-20)
-            );
-          }
-        } catch (error) {
-          console.error("Error processing WebSocket message:", error);
+      return () => {
+        if (ws) {
+          ws.close();
         }
       };
-
-      socket.onclose = (event) => {
-        console.log("WebSocket connection closed:", event);
-        dispatch(setConnected(false));
-        setWs(null);
-
-        // Attempt to reconnect after a delay
-        setTimeout(connectWebSocket, 3000);
-      };
-
-      socket.onerror = (error) => {
-        console.error("WebSocket error:", error);
-      };
     };
-
     connectWebSocket();
-
-    return () => {
-      if (ws) {
-        ws.close();
-      }
-    };
-  }, [dispatch, session, user]);
+  }, [dispatch, session, user, roomParameters, hvacParameters]);
 
   const handleRoomParameterChange = (parameter) => (event, value) => {
     const update = { [parameter]: value };

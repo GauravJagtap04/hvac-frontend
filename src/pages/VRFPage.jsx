@@ -33,110 +33,28 @@ import {
 } from "recharts";
 import { ThermostatAuto, Speed, Power, Opacity } from "@mui/icons-material";
 import {
-  ThermostatAuto,
-  Speed,
-  Power,
-  Opacity,
-  People,
-  LocalFireDepartment,
-  AspectRatio,
-  WaterDrop,
-  TrendingUp,
-} from "@mui/icons-material";
+  updateRoomParameters,
+  updateHVACParameters,
+  updateSystemStatus,
+  setConnectionStatus,
+  setSimulationStatus,
+  setSimulationPaused,
+} from "../store/store";
+import WeatherIntegration from "../components/WeatherIntegration";
 
-const VRFPage = () => {
+const SYSTEM_TYPE = "vrfSystem";
+const safeObject = (obj) => obj || {};
+
+const SimulationPage = () => {
   const theme = useTheme();
-
-  // Define StatusCard component inside VRFPage to access theme
-  const StatusCard = ({ title, value, unit, icon }) => (
-    <Paper
-      sx={{
-        p: 3,
-        height: "100%",
-        display: "flex",
-        alignItems: "center",
-        background: alpha(theme.palette.background.paper, 0.8),
-        backdropFilter: "blur(10px)",
-        borderRadius: 2,
-        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-      }}
-    >
-      <Box sx={{ mr: 2 }}>{icon}</Box>
-      <Box>
-        <Typography variant="h6" gutterBottom>
-          {title}
-        </Typography>
-        <Typography variant="h4" sx={{ fontWeight: "bold" }}>
-          {value}
-          {unit && (
-            <Typography component="span" variant="h6" sx={{ ml: 1 }}>
-              {unit}
-            </Typography>
-          )}
-        </Typography>
-      </Box>
-    </Paper>
+  const dispatch = useDispatch();
+  const { isConnected, isSimulationRunning, isSimulationPaused } = useSelector(
+    (state) => state.hvac
+  );
+  const { roomParameters, hvacParameters, systemStatus } = useSelector(
+    (state) => state.hvac.systems[SYSTEM_TYPE]
   );
 
-  // Local state management
-  const [isConnected, setIsConnected] = useState(false);
-  const [isSimulationRunning, setIsSimulationRunning] = useState(false);
-  const [isSimulationPaused, setIsSimulationPaused] = useState(false);
-
-  // Room Parameters State - matching VRFRoomParameters
-  const [roomParameters, setRoomParameters] = useState({
-    length: 10.0,
-    breadth: 8.0,
-    height: 3.0,
-    current_temp: 25.0,
-    target_temp: 23.0,
-    external_temp: 35.0,
-    wall_insulation: "medium",
-    humidity: 50.0,
-    num_people: 0,
-    heat_gain_external: 0.0,
-    mode: "cooling",
-  });
-
-  // HVAC Parameters State - matching VRFHVACParameters
-  const [hvacParameters, setHvacParameters] = useState({
-    max_capacity_kw: 10.0,
-    min_capacity_kw: 2.0,
-    cop: 3.0,
-    zones: { main: 5.0 },
-    heat_recovery: false,
-    air_flow_rate: 0.5,
-    supply_temp: 12.0,
-    fan_speed: 100.0,
-    time_interval: 1.0,
-  });
-
-  // System Status State - matching get_system_status output
-  const [systemStatus, setSystemStatus] = useState({
-    room_temperature: 25.0,
-    target_temperature: 23.0,
-    cooling_capacity_kw: 0,
-    cooling_capacity_btu: 0,
-    energy_consumption_w: 0,
-    refrigerant_flow_gs: 0,
-    heat_gain_w: 0,
-    cop: 3.0,
-    mode: "cooling",
-    fan_speed: 100,
-    humidity: 50,
-    num_people: 0,
-    external_heat_gain: 0,
-    insulation_level: "medium",
-    time_interval: 1.0,
-    room_size: 80,
-    external_temperature: 35,
-    time_to_target: 0,
-    can_reach_target: true,
-    temp_change_rate: 0,
-    rated_power_kw: 5,
-  });
-
-  // ... existing state for temperature data, websocket, etc.
   const [temperatureData, setTemperatureData] = useState([]);
   const [ws, setWs] = useState(null);
   const [estimatedTime, setEstimatedTime] = useState(0);
@@ -157,7 +75,7 @@ const VRFPage = () => {
   });
 
   useEffect(() => {
-    if (ws && isConnected) {
+    if (ws && isConnected && !isSimulationRunning) {
       ws.send(
         JSON.stringify({
           type: "room_parameters",
@@ -203,7 +121,7 @@ const VRFPage = () => {
 
       setFanSpeedWarning(hvacParameters.fanSpeed === 0);
     }
-  }, [isConnected, ws]);
+  }, [isConnected, ws, isSimulationRunning]);
 
   useEffect(() => {
     let timer;
@@ -481,7 +399,6 @@ const VRFPage = () => {
       setFanSpeedWarning(false);
     }
   };
-
   // Define StatusCard component inside VRFPage to access theme
   const StatusCard = ({ title, value, unit, icon }) => (
     <Paper
@@ -1269,9 +1186,9 @@ const VRFPage = () => {
                 <FormControlLabel
                   control={
                     <Switch
-                      checked={hvacParameters.heat_recovery}
+                      checked={hvacParameters.heatRecovery}
                       onChange={(e) =>
-                        handleHVACParameterChange("heat_recovery")(
+                        handleHVACParameterChange("heatRecovery")(
                           e,
                           e.target.checked
                         )

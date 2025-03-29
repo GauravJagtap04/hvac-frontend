@@ -73,7 +73,7 @@ const SimulationPage = () => {
   });
 
   useEffect(() => {
-    if (ws && isConnected) {
+    if (ws && isConnected && !isSimulationRunning) {
       ws.send(
         JSON.stringify({
           type: "room_parameters",
@@ -121,7 +121,7 @@ const SimulationPage = () => {
 
       setFanSpeedWarning(hvacParameters.fanSpeed === 0);
     }
-  }, [isConnected, ws]);
+  }, [isConnected, ws, isSimulationRunning]);
 
   useEffect(() => {
     let timer;

@@ -97,8 +97,6 @@ const initialState = {
         numPeople: 0,
         heatGainExternal: 0.0,
         mode: "cooling",
-        humidity: 50.0,
-        heatGainExternal: 0.0,
       },
       hvacParameters: {
         power: 3.5,

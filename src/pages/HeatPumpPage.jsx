@@ -12,12 +12,12 @@ import {
   Button,
   FormControl,
   InputLabel,
-  Switch,
-  FormControlLabel,
   CircularProgress,
   Chip,
   useTheme,
   alpha,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import {
   LineChart,
@@ -29,13 +29,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import {
-  ThermostatAuto,
-  Speed,
-  Power,
-  Opacity,
-  People,
-} from "@mui/icons-material";
+import { ThermostatAuto, Speed, Power, Opacity } from "@mui/icons-material";
 import {
   updateRoomParameters,
   updateHVACParameters,
@@ -44,26 +38,87 @@ import {
   setSimulationStatus,
   setSimulationPaused,
 } from "../store/store";
-import { Link } from "react-router-dom";
+import WeatherIntegration from "../components/WeatherIntegration";
 
 const SYSTEM_TYPE = "heatPumpSystem";
 
 const SimulationPage = () => {
   const theme = useTheme();
   const dispatch = useDispatch();
-  const {
-    roomParameters,
-    hvacParameters,
-    systemStatus,
-    isConnected,
-    isSimulationRunning,
-    isSimulationPaused,
-  } = useSelector((state) => state.hvac);
+  const { isConnected, isSimulationRunning, isSimulationPaused } = useSelector(
+    (state) => state.hvac
+  );
+  const { roomParameters, hvacParameters, systemStatus } = useSelector(
+    (state) => state.hvac.systems[SYSTEM_TYPE]
+  );
 
   const [temperatureData, setTemperatureData] = useState([]);
   const [ws, setWs] = useState(null);
   const [estimatedTime, setEstimatedTime] = useState(0);
   const [countdownTime, setCountdownTime] = useState(0);
+  const [targetReachAlert, setTargetReachAlert] = useState(false);
+  const [weatherSuccessOpen, setWeatherSuccessOpen] = useState(false);
+  const [weatherSuccessMessage, setWeatherSuccessMessage] = useState("");
+  const [weatherErrorOpen, setWeatherErrorOpen] = useState(false);
+  const [weatherErrorMessage, setWeatherErrorMessage] = useState("");
+  const [invalidParameterOpen, setInvalidParameterOpen] = useState(false);
+  const [fanSpeedWarning, setFanSpeedWarning] = useState(false);
+  const [invalidParameterMessage, setInvalidParameterMessage] = useState("");
+  const [errorStartingSimulation, setErrorStartingSimulation] = useState(false);
+  const [invalidFields, setInvalidFields] = useState({
+    length: false,
+    breadth: false,
+    height: false,
+  });
+
+  useEffect(() => {
+    if (ws && isConnected) {
+      ws.send(
+        JSON.stringify({
+          type: "room_parameters",
+          data: {
+            length: roomParameters.length,
+            breadth: roomParameters.breadth,
+            height: roomParameters.height,
+            numPeople: roomParameters.numPeople,
+            mode: roomParameters.mode,
+            wallInsulation: roomParameters.wallInsulation,
+            currentTemp: roomParameters.currentTemp,
+            targetTemp: roomParameters.targetTemp,
+            externalTemp: roomParameters.externalTemp,
+          },
+        })
+      );
+
+      ws.send(
+        JSON.stringify({
+          type: "hvac_parameters",
+          data: {
+            power: hvacParameters.power,
+            airFlowRate: hvacParameters.airFlowRate,
+            fanSpeed: hvacParameters.fanSpeed,
+            copRated: hvacParameters.copRated,
+            copMin: hvacParameters.copMin,
+            supplyTempHeating: hvacParameters.supplyTempHeating,
+            supplyTempCooling: hvacParameters.supplyTempCooling,
+            defrostTempThreshold: hvacParameters.defrostTempThreshold,
+            refrigerantType: hvacParameters.refrigerantType,
+          },
+        })
+      );
+
+      const newInvalidFields = {
+        length: roomParameters.length <= 0,
+        breadth: roomParameters.breadth <= 0,
+        height: roomParameters.height <= 0,
+      };
+
+      setInvalidFields(newInvalidFields);
+      setErrorStartingSimulation(Object.values(newInvalidFields).some(Boolean));
+
+      setFanSpeedWarning(hvacParameters.fanSpeed === 0);
+    }
+  }, [isConnected, ws]);
 
   useEffect(() => {
     let timer;
@@ -76,8 +131,32 @@ const SimulationPage = () => {
   }, [isSimulationRunning, isSimulationPaused, countdownTime]);
 
   useEffect(() => {
+    if (isSimulationRunning && !isSimulationPaused) {
+      const currentTemp = systemStatus.roomTemperature;
+      const targetTemp = systemStatus.targetTemperature;
+
+      if (Math.abs(currentTemp - targetTemp) == 0) {
+        setTargetReachAlert(true);
+        ws?.send(
+          JSON.stringify({
+            type: "simulation_control",
+            data: { action: "stop" },
+          })
+        );
+        dispatch(setSimulationStatus(false));
+        dispatch(setSimulationPaused(false));
+      }
+    }
+  }, [
+    systemStatus.roomTemperature,
+    roomParameters.targetTemp,
+    isSimulationRunning,
+    isSimulationPaused,
+  ]);
+
+  useEffect(() => {
     const websocket = new WebSocket(
-      "ws://localhost:8000/ws?system_type=heat-pump-system&client_id=heat_pump_system_client"
+      "ws://localhost:8000/ws?system_type=heat-pump-system"
     );
 
     websocket.onopen = () => {
@@ -88,20 +167,55 @@ const SimulationPage = () => {
     websocket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log("Received websocket data:", data); // debug logging
+
+        // Handle simulation control responses
         if (data.type === "simulation_status") {
           dispatch(setSimulationStatus(data.data.isRunning));
           dispatch(setSimulationPaused(data.data.isPaused));
-          setEstimatedTime(data.data.estimatedTimeToTarget);
-          setCountdownTime(data.data.estimatedTimeToTarget);
-        } else if (data.system_status) {
+          if (data.data.estimatedTimeToTarget) {
+            setEstimatedTime(data.data.estimatedTimeToTarget);
+            setCountdownTime(data.data.estimatedTimeToTarget);
+          }
+        }
+        // Handle temperature+status updates from main loop
+        else if (data.system_status) {
+          // Mapping backend snake_case to frontend camelCase
           dispatch(
             updateSystemStatus({
-              roomTemperature: data.system_status.room_temperature,
-              coolingCapacityKw: data.system_status.cooling_capacity_kw,
-              energyConsumptionW: data.system_status.energy_consumption_w,
-              heatGainW: data.system_status.heat_gain_w,
-              cop: data.system_status.cop,
-              refrigerantFlowGs: data.system_status.refrigerant_flow_gs,
+              system: SYSTEM_TYPE,
+              status: {
+                roomTemperature: data.system_status.room_temperature,
+                targetTemperature: data.system_status.target_temperature,
+                externalTemperature: data.system_status.external_temperature,
+                coolingCapacityKw: data.system_status.cooling_capacity_kw,
+                coolingCapacityBtu: data.system_status.cooling_capacity_btu,
+                heatingCapacityKw: data.system_status.heating_capacity_kw,
+                heatingCapacityBtu: data.system_status.heating_capacity_btu,
+                energyConsumptionW: data.system_status.energy_consumption_w,
+                refrigerantFlowGs: data.system_status.refrigerant_flow_gs,
+                heatGainW: data.system_status.heat_gain_w,
+                ratedCop: data.system_status.rated_cop,
+                actualCop: data.system_status.actual_cop,
+                copReductionFactor: data.system_status.cop_reduction_factor,
+                mode: data.system_status.mode,
+                defrostActive: data.system_status.defrost_active,
+                defrostRemainingTime: data.system_status.defrost_remaining_time,
+                timeSinceDefrost: data.system_status.time_since_defrost,
+                fanSpeed: data.system_status.fan_speed,
+                humidity: data.system_status.humidity,
+                numPeople: data.system_status.num_people,
+                externalHeatGain: data.system_status.external_heat_gain,
+                insulationLevel: data.system_status.insulation_level,
+                timeInterval: data.system_status.time_interval,
+                roomSize: data.system_status.room_size,
+                canReachTarget: data.system_status.can_reach_target,
+                timeToTarget: data.system_status.time_to_target,
+                tempChangeRate: data.system_status.temp_change_rate,
+                ratedPowerKw: data.system_status.rated_power_kw,
+                refrigerantType: data.system_status.refrigerant_type,
+                supplyTemperature: data.system_status.supply_temperature,
+              },
             })
           );
 
@@ -111,7 +225,17 @@ const SimulationPage = () => {
               {
                 time: new Date().toLocaleTimeString(),
                 temperature: data.system_status.room_temperature,
-                target: roomParameters.targetTemp,
+              },
+            ].slice(-20)
+          );
+        } else if (data.temperature) {
+          // Handle simple temperature updates
+          setTemperatureData((prev) =>
+            [
+              ...prev,
+              {
+                time: new Date().toLocaleTimeString(),
+                temperature: data.temperature,
               },
             ].slice(-20)
           );
@@ -133,16 +257,134 @@ const SimulationPage = () => {
     };
   }, [dispatch]);
 
+  const sanitizeNumericInput = (value) => {
+    if (value === "") return 0;
+
+    const parsedValue = parseFloat(value);
+
+    if (isNaN(parsedValue)) return 0;
+
+    const sanitized = parseFloat(parsedValue.toString());
+
+    return sanitized;
+  };
+
+  const handleWeatherError = (errorMessage) => {
+    setWeatherErrorMessage(errorMessage);
+    setWeatherErrorOpen(true);
+  };
+
+  const handleWeatherSuccess = (location, temperature) => {
+    setWeatherSuccessMessage(
+      `Weather fetched successfully: ${temperature}°C in ${location}`
+    );
+    setWeatherSuccessOpen(true);
+  };
+
   const handleRoomParameterChange = (parameter) => (event, value) => {
     const update = { [parameter]: value };
-    dispatch(updateRoomParameters(update));
-    ws?.send(JSON.stringify({ type: "room_parameters", data: update }));
+    const newInvalidFields = { ...invalidFields };
+
+    if (["length", "breadth", "height"].includes(parameter)) {
+      // For direct numeric inputs like from TextField, handle empty values
+      let actualValue =
+        typeof event.target?.value !== "undefined"
+          ? event.target.value === ""
+            ? 0
+            : sanitizeNumericInput(event.target.value)
+          : value;
+
+      // Convert NaN to 0 for better UX
+      if (isNaN(actualValue)) actualValue = 0;
+
+      // Zero or negative values are invalid
+      if (actualValue <= 0) {
+        newInvalidFields[parameter] = true;
+
+        // Show error message for this field
+        let paramName =
+          parameter.charAt(0).toUpperCase() + parameter.substring(1);
+        if (parameter === "breadth") paramName = "Width";
+
+        setInvalidParameterOpen(true);
+        setInvalidParameterMessage(`${paramName} cannot be zero or negative.`);
+
+        // Update the field value to 0 if it was empty
+        if (event.target?.value === "") {
+          // Force a value of 0 instead of letting it be empty
+          event.target.value = "0";
+        }
+
+        // Don't send invalid value to backend, but update the UI
+        setInvalidFields(newInvalidFields);
+
+        // Update Redux with the value for display purposes
+        dispatch(
+          updateRoomParameters({
+            system: SYSTEM_TYPE,
+            parameters: { [parameter]: actualValue },
+          })
+        );
+        return;
+      } else {
+        // Clear the error for this field
+        newInvalidFields[parameter] = false;
+      }
+    } else if (parameter === "numPeople") {
+      let actualValue =
+        typeof event.target?.value !== "undefined"
+          ? event.target.value === ""
+            ? 0
+            : parseFloat(event.target.value)
+          : value;
+
+      // Convert NaN to 0 for better UX
+      if (isNaN(actualValue)) actualValue = 0;
+
+      // For numPeople, negative values are invalid (zero is valid)
+      if (actualValue < 0) {
+        newInvalidFields[parameter] = true;
+        setInvalidParameterOpen(true);
+        setInvalidParameterMessage("Number of people cannot be negative.");
+        setInvalidFields(newInvalidFields);
+
+        // Update Redux with the value for display purposes
+        dispatch(
+          updateRoomParameters({
+            system: SYSTEM_TYPE,
+            parameters: { [parameter]: actualValue },
+          })
+        );
+        return;
+      } else {
+        newInvalidFields[parameter] = false;
+      }
+    }
+
+    // Update invalid fields state
+    setInvalidFields(newInvalidFields);
+
+    // Only proceed with sending to backend if no invalid fields
+    dispatch(updateRoomParameters({ system: SYSTEM_TYPE, parameters: update }));
+    if (!Object.values(newInvalidFields).some(Boolean)) {
+      ws?.send(JSON.stringify({ type: "room_parameters", data: update }));
+    }
+    setErrorStartingSimulation(Object.values(newInvalidFields).some(Boolean));
   };
+
+  const hasInvalidFields = Object.values(invalidFields).some(Boolean);
 
   const handleHVACParameterChange = (parameter) => (event, value) => {
     const update = { [parameter]: value };
-    dispatch(updateHVACParameters(update));
+    dispatch(updateHVACParameters({ system: SYSTEM_TYPE, parameters: update }));
     ws?.send(JSON.stringify({ type: "hvac_parameters", data: update }));
+
+    // Show warning if fan speed is set to zero
+    if (parameter === "fanSpeed" && value === 0) {
+      setFanSpeedWarning(true);
+    } else if (parameter === "fanSpeed" && value > 0) {
+      setFanSpeedWarning(false);
+    }
   };
 
   const StatusCard = ({ title, value, unit, icon }) => (
@@ -239,7 +481,7 @@ const SimulationPage = () => {
         <Grid item xs={12} md={3}>
           <StatusCard
             title="Room Temperature"
-            value={systemStatus.roomTemperature.toFixed(1)}
+            value={(systemStatus?.roomTemperature || 25.0).toFixed(1)}
             unit="°C"
             icon={
               <ThermostatAuto
@@ -252,7 +494,7 @@ const SimulationPage = () => {
         <Grid item xs={12} md={3}>
           <StatusCard
             title="Energy Usage"
-            value={(systemStatus.energyConsumptionW / 1000).toFixed(2)}
+            value={((systemStatus?.energyConsumptionW || 0) / 1000).toFixed(2)}
             unit="kW"
             icon={
               <Power sx={{ fontSize: 48, color: theme.palette.primary.main }} />
@@ -263,7 +505,7 @@ const SimulationPage = () => {
         <Grid item xs={12} md={3}>
           <StatusCard
             title="COP"
-            value={systemStatus.cop.toFixed(2)}
+            value={(systemStatus?.actualCop || 3.0).toFixed(2)}
             unit=""
             icon={
               <Speed sx={{ fontSize: 48, color: theme.palette.primary.main }} />
@@ -274,7 +516,7 @@ const SimulationPage = () => {
         <Grid item xs={12} md={3}>
           <StatusCard
             title="Refrigerant Flow"
-            value={systemStatus.refrigerantFlowGs.toFixed(1)}
+            value={(systemStatus?.refrigerantFlowGs || 0).toFixed(1)}
             unit="g/s"
             icon={
               <Opacity
@@ -339,7 +581,7 @@ const SimulationPage = () => {
                 />
                 <Line
                   type="monotone"
-                  dataKey={(dataPoint) => roomParameters.targetTemp}
+                  dataKey={() => roomParameters.targetTemp}
                   stroke={theme.palette.secondary.main}
                   name="Target Temperature"
                   strokeWidth={2}
@@ -380,20 +622,34 @@ const SimulationPage = () => {
                   label="Length (m)"
                   type="number"
                   value={roomParameters.length}
+                  error={invalidFields.length}
+                  helperText={
+                    invalidFields.length
+                      ? "Length cannot be zero or negative."
+                      : ""
+                  }
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    (hasInvalidFields && !invalidFields.length)
+                  }
                   onChange={(e) =>
                     handleRoomParameterChange("length")(
                       e,
-                      parseFloat(e.target.value)
+                      sanitizeNumericInput(e.target.value || 0)
                     )
                   }
                   inputProps={{ step: 0.1, min: 1 }}
                   sx={{
                     "& .MuiOutlinedInput-root": {
                       "& fieldset": {
-                        borderColor: alpha(theme.palette.primary.main, 0.2),
+                        borderColor: invalidFields.length
+                          ? theme.palette.error.main
+                          : alpha(theme.palette.primary.main, 0.2),
                       },
                       "&:hover fieldset": {
-                        borderColor: alpha(theme.palette.primary.main, 0.3),
+                        borderColor: invalidFields.length
+                          ? theme.palette.error.main
+                          : alpha(theme.palette.primary.main, 0.3),
                       },
                     },
                   }}
@@ -405,20 +661,34 @@ const SimulationPage = () => {
                   label="Width (m)"
                   type="number"
                   value={roomParameters.breadth}
+                  error={invalidFields.breadth}
+                  helperText={
+                    invalidFields.breadth
+                      ? "Width cannot be zero or negative"
+                      : ""
+                  }
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    (hasInvalidFields && !invalidFields.breadth)
+                  }
                   onChange={(e) =>
                     handleRoomParameterChange("breadth")(
                       e,
-                      parseFloat(e.target.value)
+                      sanitizeNumericInput(e.target.value || 0)
                     )
                   }
                   inputProps={{ step: 0.1, min: 1 }}
                   sx={{
                     "& .MuiOutlinedInput-root": {
                       "& fieldset": {
-                        borderColor: alpha(theme.palette.primary.main, 0.2),
+                        borderColor: invalidFields.breadth
+                          ? theme.palette.error.main
+                          : alpha(theme.palette.primary.main, 0.2),
                       },
                       "&:hover fieldset": {
-                        borderColor: alpha(theme.palette.primary.main, 0.3),
+                        borderColor: invalidFields.breadth
+                          ? theme.palette.error.main
+                          : alpha(theme.palette.primary.main, 0.3),
                       },
                     },
                   }}
@@ -431,20 +701,34 @@ const SimulationPage = () => {
                   label="Height (m)"
                   type="number"
                   value={roomParameters.height}
+                  error={invalidFields.height}
+                  helperText={
+                    invalidFields.height
+                      ? "Height cannot be zero or negative"
+                      : ""
+                  }
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    (hasInvalidFields && !invalidFields.height)
+                  }
                   onChange={(e) =>
                     handleRoomParameterChange("height")(
                       e,
-                      parseFloat(e.target.value)
+                      sanitizeNumericInput(e.target.value || 0)
                     )
                   }
                   inputProps={{ step: 0.1, min: 1 }}
                   sx={{
                     "& .MuiOutlinedInput-root": {
                       "& fieldset": {
-                        borderColor: alpha(theme.palette.primary.main, 0.2),
+                        borderColor: invalidFields.height
+                          ? theme.palette.error.main
+                          : alpha(theme.palette.primary.main, 0.2),
                       },
                       "&:hover fieldset": {
-                        borderColor: alpha(theme.palette.primary.main, 0.3),
+                        borderColor: invalidFields.height
+                          ? theme.palette.error.main
+                          : alpha(theme.palette.primary.main, 0.3),
                       },
                     },
                   }}
@@ -456,10 +740,14 @@ const SimulationPage = () => {
                   label="No. of People"
                   type="number"
                   value={roomParameters.numPeople}
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    hasInvalidFields
+                  }
                   onChange={(e) =>
                     handleRoomParameterChange("numPeople")(
                       e,
-                      parseFloat(e.target.value)
+                      sanitizeNumericInput(e.target.value || 0)
                     )
                   }
                   inputProps={{ step: 1, min: 0 }}
@@ -503,6 +791,10 @@ const SimulationPage = () => {
                     onChange={(e) =>
                       handleRoomParameterChange("mode")(e, e.target.value)
                     }
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
                   >
                     <MenuItem value="cooling">Cooling</MenuItem>
                     <MenuItem value="heating">Heating</MenuItem>
@@ -539,6 +831,10 @@ const SimulationPage = () => {
                         e.target.value
                       )
                     }
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
                   >
                     <MenuItem value="low">Low</MenuItem>
                     <MenuItem value="medium">Medium</MenuItem>
@@ -554,6 +850,10 @@ const SimulationPage = () => {
                 <Slider
                   value={roomParameters.currentTemp}
                   onChange={handleRoomParameterChange("currentTemp")}
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    hasInvalidFields
+                  }
                   min={10}
                   max={40}
                   step={0.5}
@@ -569,6 +869,10 @@ const SimulationPage = () => {
                 <Slider
                   value={roomParameters.targetTemp}
                   onChange={handleRoomParameterChange("targetTemp")}
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    hasInvalidFields
+                  }
                   min={16}
                   max={30}
                   step={0.5}
@@ -580,6 +884,17 @@ const SimulationPage = () => {
               <Grid item xs={12}>
                 <Typography gutterBottom>
                   External Temperature: {roomParameters.externalTemp}°C
+                  <WeatherIntegration
+                    systemType={SYSTEM_TYPE}
+                    websocket={ws}
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                    currentTemp={roomParameters.externalTemp}
+                    onError={handleWeatherError}
+                    onSuccess={handleWeatherSuccess}
+                  />
                 </Typography>
                 <Slider
                   value={roomParameters.externalTemp}
@@ -589,6 +904,10 @@ const SimulationPage = () => {
                   step={0.5}
                   marks
                   valueLabelDisplay="auto"
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    hasInvalidFields
+                  }
                 />
               </Grid>
             </Grid>
@@ -625,9 +944,51 @@ const SimulationPage = () => {
                 <Slider
                   value={hvacParameters.power}
                   onChange={handleHVACParameterChange("power")}
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    hasInvalidFields
+                  }
                   min={1}
                   max={10}
                   step={0.5}
+                  marks
+                  valueLabelDisplay="auto"
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Rated COP: {hvacParameters.copRated}
+                </Typography>
+                <Slider
+                  value={hvacParameters.copRated}
+                  onChange={handleHVACParameterChange("copRated")}
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    hasInvalidFields
+                  }
+                  min={1.0}
+                  max={5.0}
+                  step={0.1}
+                  marks
+                  valueLabelDisplay="auto"
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Minimum COP: {hvacParameters.copMin}
+                </Typography>
+                <Slider
+                  value={hvacParameters.copMin}
+                  onChange={handleHVACParameterChange("copMin")}
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    hasInvalidFields
+                  }
+                  min={1.0}
+                  max={3.0}
+                  step={0.1}
                   marks
                   valueLabelDisplay="auto"
                 />
@@ -640,9 +1001,48 @@ const SimulationPage = () => {
                 <Slider
                   value={hvacParameters.airFlowRate}
                   onChange={handleHVACParameterChange("airFlowRate")}
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    hasInvalidFields
+                  }
                   min={0.1}
                   max={2.0}
                   step={0.1}
+                  marks
+                  valueLabelDisplay="auto"
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Supply Temperature (
+                  {`${roomParameters.mode
+                    .charAt(0)
+                    .toUpperCase()}${roomParameters.mode.substring(1)}`}
+                  ):{" "}
+                  {roomParameters.mode === "heating"
+                    ? hvacParameters.supplyTempHeating
+                    : hvacParameters.supplyTempCooling}
+                  °C
+                </Typography>
+                <Slider
+                  value={
+                    roomParameters.mode === "heating"
+                      ? hvacParameters.supplyTempHeating
+                      : hvacParameters.supplyTempCooling
+                  }
+                  onChange={
+                    roomParameters.mode === "heating"
+                      ? handleHVACParameterChange("supplyTempHeating")
+                      : handleHVACParameterChange("supplyTempCooling")
+                  }
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    hasInvalidFields
+                  }
+                  min={roomParameters.mode === "heating" ? 35 : 8}
+                  max={roomParameters.mode === "heating" ? 55 : 16}
+                  step={1}
                   marks
                   valueLabelDisplay="auto"
                 />
@@ -655,12 +1055,100 @@ const SimulationPage = () => {
                 <Slider
                   value={hvacParameters.fanSpeed}
                   onChange={handleHVACParameterChange("fanSpeed")}
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    hasInvalidFields
+                  }
                   min={0}
                   max={100}
                   step={1}
                   marks
                   valueLabelDisplay="auto"
                 />
+                {fanSpeedWarning && (
+                  <Typography
+                    color="warning.main"
+                    variant="caption"
+                    sx={{
+                      display: "block",
+                      mt: 1,
+                      fontWeight: "medium",
+                      bgcolor: alpha(theme.palette.warning.main, 0.1),
+                      p: 1,
+                      borderRadius: 1,
+                      border: `1px solid ${alpha(
+                        theme.palette.warning.main,
+                        0.3
+                      )}`,
+                    }}
+                  >
+                    Warning: Fan speed set to 0. HVAC system may not work as
+                    expected.
+                  </Typography>
+                )}
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Defrost Temperature Threshold:{" "}
+                  {hvacParameters.defrostTempThreshold}
+                  °C
+                </Typography>
+                <Slider
+                  value={hvacParameters.defrostTempThreshold}
+                  onChange={handleHVACParameterChange("defrostTempThreshold")}
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    hasInvalidFields
+                  }
+                  min={0}
+                  max={10}
+                  step={0.5}
+                  marks
+                  valueLabelDisplay="auto"
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <FormControl
+                  fullWidth
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      "& fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.2),
+                      },
+                      "&:hover fieldset": {
+                        borderColor: alpha(theme.palette.primary.main, 0.3),
+                      },
+                    },
+                  }}
+                >
+                  <InputLabel
+                    sx={{
+                      backgroundColor: theme.palette.background.paper,
+                      padding: "0 6px",
+                    }}
+                  >
+                    Refrigerant Type
+                  </InputLabel>
+                  <Select
+                    value={hvacParameters.refrigerantType}
+                    onChange={(e) =>
+                      handleHVACParameterChange("refrigerantType")(
+                        e,
+                        e.target.value
+                      )
+                    }
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  >
+                    <MenuItem value="R410A">R410A</MenuItem>
+                    <MenuItem value="R32">R32</MenuItem>
+                    <MenuItem value="R290">R290 (Propane)</MenuItem>
+                  </Select>
+                </FormControl>
               </Grid>
             </Grid>
           </Paper>
@@ -697,20 +1185,28 @@ const SimulationPage = () => {
                       <CircularProgress size={24} color="inherit" />
                     ) : null
                   }
+                  disabled={hasInvalidFields}
                   onClick={() => {
+                    const action = isSimulationRunning
+                      ? isSimulationPaused
+                        ? "resume"
+                        : "pause"
+                      : "start";
+
                     const message = {
                       type: "simulation_control",
-                      data: {
-                        action: isSimulationRunning
-                          ? isSimulationPaused
-                            ? "resume"
-                            : "pause"
-                          : "start",
-                      },
+                      data: { action },
                     };
+
                     ws?.send(JSON.stringify(message));
-                    if (isSimulationRunning) {
-                      dispatch(setSimulationPaused(!isSimulationPaused));
+
+                    if (action === "start") {
+                      dispatch(setSimulationStatus(true));
+                      dispatch(setSimulationPaused(false));
+                    } else if (action === "pause") {
+                      dispatch(setSimulationPaused(true));
+                    } else if (action === "resume") {
+                      dispatch(setSimulationPaused(false));
                     }
                   }}
                   sx={{
@@ -723,6 +1219,7 @@ const SimulationPage = () => {
                     boxShadow: isSimulationRunning
                       ? `0 0 20px ${alpha(theme.palette.error.main, 0.4)}`
                       : `0 0 20px ${alpha(theme.palette.primary.main, 0.4)}`,
+                    opacity: hasInvalidFields ? 0.6 : 1,
                   }}
                 >
                   {isSimulationRunning
@@ -744,6 +1241,8 @@ const SimulationPage = () => {
                         },
                       };
                       ws?.send(JSON.stringify(message));
+                      dispatch(setSimulationStatus(false));
+                      dispatch(setSimulationPaused(false));
                     }}
                     sx={{
                       px: 6,
@@ -802,6 +1301,63 @@ const SimulationPage = () => {
           </Paper>
         </Grid>
       </Grid>
+      <Snackbar
+        open={invalidParameterOpen}
+        autoHideDuration={5000}
+        onClose={() => setInvalidParameterOpen(false)}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert
+          severity="error"
+          variant="filled"
+          onClose={() => setInvalidParameterOpen(false)}
+        >
+          {invalidParameterMessage}
+        </Alert>
+      </Snackbar>
+      <Snackbar
+        open={targetReachAlert}
+        autoHideDuration={6000}
+        onClose={() => setTargetReachAlert(false)}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert
+          severity="success"
+          variant="filled"
+          onClose={() => setTargetReachAlert(false)}
+        >
+          Target temperature reached! Simulation successful.
+        </Alert>
+      </Snackbar>
+      <Snackbar
+        open={weatherSuccessOpen}
+        autoHideDuration={5000}
+        onClose={() => setWeatherSuccessOpen(false)}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert
+          severity="success"
+          variant="filled"
+          onClose={() => setWeatherSuccessOpen(false)}
+        >
+          {weatherSuccessMessage}
+        </Alert>
+      </Snackbar>
+      <Snackbar
+        open={weatherErrorOpen}
+        autoHideDuration={6000}
+        onClose={() => setWeatherErrorOpen(false)}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert
+          severity="error"
+          variant="filled"
+          onClose={() => setWeatherErrorOpen(false)}
+        >
+          {weatherErrorMessage ||
+            "Error fetching weather data. Please try again."}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

@@ -39,12 +39,12 @@ const SimulationsPage = () => {
       color: "#4CAF50",
     },
     {
-      name: "variable refrigerant flow",
-      id: "variable-refrigerant-flow",
-      title: "Variable Refrigerant Flow",
+      name: "variable refrigerant flow system",
+      id: "variable-refrigerant-flow-system",
+      title: "Variable Refrigerant Flow System",
       description: "VRF system simulation and analysis for energy efficiency",
       icon: "❄️",
-      path: "/simulations/variable-refrigerant-flow",
+      path: "/simulations/variable-refrigerant-flow-system",
       color: "#2196F3",
     },
     {
@@ -81,7 +81,7 @@ const SimulationsPage = () => {
 
     if (id === "split-system") {
       dispatch(setSelectedSystem("split system"));
-    } else if (id === "variable-refrigerant-flow") {
+    } else if (id === "variable-refrigerant-flow-system") {
       dispatch(setSelectedSystem("variable refrigerant flow system"));
     } else if (id === "heat-pump-system") {
       dispatch(setSelectedSystem("heat pump system"));

@@ -1,6 +1,6 @@
-import { Navigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { supabase } from './SupabaseClient';
+import { Navigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { supabase } from "./SupabaseClient";
 
 const ProtectedRoute = ({ children }) => {
   const [session, setSession] = useState(null);
@@ -8,6 +8,7 @@ const ProtectedRoute = ({ children }) => {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("Session data:", session);
       setSession(session);
       setLoading(false);
     });

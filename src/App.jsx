@@ -21,7 +21,7 @@ import TrainingPage from "./pages/TrainingPage";
 import SettingsPage from "./pages/SettingsPage";
 
 // Create router with all routes
-import ProtectedRoute from './components/ProtectedRoute';
+import ProtectedRoute from "./components/ProtectedRoute";
 
 // ...existing imports...
 
@@ -41,7 +41,7 @@ const router = createBrowserRouter(
         <Route path="/simulations" element={<SimulationsPage />} />
         <Route path="/simulations/split-system" element={<SplitSystemPage />} />
         <Route
-          path="/simulations/variable-refrigerant-flow"
+          path="/simulations/variable-refrigerant-flow-system"
           element={<VRFPage />}
         />
         <Route

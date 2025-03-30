@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-import { supabase } from "../components/SupabaseClient"; 
+import { supabase } from "../components/SupabaseClient";
 import { useDispatch, useSelector } from "react-redux";
 import {
   Box,
@@ -53,9 +53,9 @@ const SimulationPage = () => {
   const { roomParameters, hvacParameters, systemStatus } = useSelector(
     (state) => state.hvac.systems[SYSTEM_TYPE]
   );
-// Add these state variables with your other useState declarations
-const [sessionError, setSessionError] = useState(null);
-const [currentSession, setCurrentSession] = useState(null);
+  // Add these state variables with your other useState declarations
+  const [sessionError, setSessionError] = useState(null);
+  const [currentSession, setCurrentSession] = useState(null);
   const [temperatureData, setTemperatureData] = useState([]);
   const [ws, setWs] = useState(null);
   const [estimatedTime, setEstimatedTime] = useState(0);
@@ -147,6 +147,23 @@ const [currentSession, setCurrentSession] = useState(null);
             data: { action: "stop" },
           })
         );
+        const currentSessionData = JSON.parse(localStorage.getItem("session"));
+        if (currentSessionData) {
+          saveSimulationData(currentSessionData.session_id, true)
+            .then(() => {
+              // Update session status after saving simulation data
+              return updateSessionStatus(currentSessionData.session_id, false);
+            })
+            .then(() => {
+              // Clear session from localStorage
+              localStorage.removeItem("session");
+              setCurrentSession(null);
+            })
+            .catch((error) => {
+              console.error("Error saving simulation data:", error);
+              setSessionError(error.message);
+            });
+        }
         dispatch(setSimulationStatus(false));
         dispatch(setSimulationPaused(false));
       }
@@ -278,119 +295,118 @@ const [currentSession, setCurrentSession] = useState(null);
     setWeatherErrorOpen(true);
   };
   // Add this function near your other utility functions
-const saveSimulationData = async (sessionId, isSuccess) => {
-  try {
-    const user = JSON.parse(localStorage.getItem("user"));
-    if (!user) {
-      throw new Error("User not authenticated");
-    }
+  const saveSimulationData = async (sessionId, isSuccess) => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user"));
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
 
-    const simulationData = {
-      session_id: sessionId,
-      type: 'advanced_havac',
-      parameters: {
-        room: {
-          length: roomParameters.length,
-          breadth: roomParameters.breadth,
-          height: roomParameters.height,
-          numPeople: roomParameters.numPeople,
-          mode: roomParameters.mode,
-          wallInsulation: roomParameters.wallInsulation,
-          currentTemp: roomParameters.currentTemp,
-          targetTemp: roomParameters.targetTemp,
-          externalTemp: roomParameters.externalTemp,
+      const simulationData = {
+        session_id: sessionId,
+        type: "advanced_hvac",
+        parameters: {
+          room: {
+            length: roomParameters.length,
+            breadth: roomParameters.breadth,
+            height: roomParameters.height,
+            numPeople: roomParameters.numPeople,
+            mode: roomParameters.mode,
+            wallInsulation: roomParameters.wallInsulation,
+            currentTemp: roomParameters.currentTemp,
+            targetTemp: roomParameters.targetTemp,
+            externalTemp: roomParameters.externalTemp,
+          },
+          hvac: {
+            power: hvacParameters.power,
+            airFlowRate: hvacParameters.airFlowRate,
+            fanSpeed: hvacParameters.fanSpeed,
+            copRated: hvacParameters.copRated,
+            copMin: hvacParameters.copMin,
+            supplyTempHeating: hvacParameters.supplyTempHeating,
+            supplyTempCooling: hvacParameters.supplyTempCooling,
+            defrostTempThreshold: hvacParameters.defrostTempThreshold,
+            refrigerantType: hvacParameters.refrigerantType,
+          },
+          results: {
+            finalTemperature: systemStatus.roomTemperature,
+            energyConsumption: systemStatus.energyConsumptionW,
+            actualCop: systemStatus.actualCop,
+            refrigerantFlow: systemStatus.refrigerantFlowGs,
+            defrostActive: systemStatus.defrostActive,
+            timeSinceDefrost: systemStatus.timeSinceDefrost,
+          },
         },
-        hvac: {
-          power: hvacParameters.power,
-          airFlowRate: hvacParameters.airFlowRate,
-          fanSpeed: hvacParameters.fanSpeed,
-          copRated: hvacParameters.copRated,
-          copMin: hvacParameters.copMin,
-          supplyTempHeating: hvacParameters.supplyTempHeating,
-          supplyTempCooling: hvacParameters.supplyTempCooling,
-          defrostTempThreshold: hvacParameters.defrostTempThreshold,
-          refrigerantType: hvacParameters.refrigerantType
-        },
-        results: {
-          finalTemperature: systemStatus.roomTemperature,
-          energyConsumption: systemStatus.energyConsumptionW,
-          actualCop: systemStatus.actualCop,
-          refrigerantFlow: systemStatus.refrigerantFlowGs,
-          defrostActive: systemStatus.defrostActive,
-          timeSinceDefrost: systemStatus.timeSinceDefrost
-        }
-      },
-      userid: user.id,
-      is_success: isSuccess
-    };
+        userid: user.id,
+        is_success: isSuccess,
+      };
 
-    const { data, error } = await supabase
-      .from('simulations')
-      .insert([simulationData])
-      .select();
-
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error('Error saving simulation data:', error.message);
-    setSessionError(error.message);
-    throw error;
-  }
-};
-const createSession = async () => {
-  try {
-    const user = JSON.parse(localStorage.getItem("user"));
-    if (!user) {
-      throw new Error("User not authenticated");
-    }
-
-    const { data: existingSession, error: fetchError } = await supabase
-      .from('sessions')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .single();
-
-
-    if (!existingSession) {
       const { data, error } = await supabase
-        .from('sessions')
-        .insert([
-          {
-            user_id: user.id,
-            is_active: true
-          }
-        ])
-        .select()
-        .single();
+        .from("simulations")
+        .insert([simulationData])
+        .select();
 
       if (error) throw error;
-      localStorage.setItem('session', JSON.stringify(data));
       return data;
+    } catch (error) {
+      console.error("Error saving simulation data:", error.message);
+      setSessionError(error.message);
+      throw error;
     }
+  };
+  const createSession = async () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user"));
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
 
-    return existingSession;
-  } catch (error) {
-    console.error('Error creating session:', error.message);
-    setSessionError(error.message);
-    return null;
-  }
-};
+      const { data: existingSession, error: fetchError } = await supabase
+        .from("sessions")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .single();
+
+      if (!existingSession) {
+        const { data, error } = await supabase
+          .from("sessions")
+          .insert([
+            {
+              user_id: user.id,
+              is_active: true,
+            },
+          ])
+          .select()
+          .single();
+
+        if (error) throw error;
+        localStorage.setItem("session", JSON.stringify(data));
+        return data;
+      }
+
+      return existingSession;
+    } catch (error) {
+      console.error("Error creating session:", error.message);
+      setSessionError(error.message);
+      return null;
+    }
+  };
   const updateSessionStatus = async (sessionId, isActive = false) => {
     try {
       const { error } = await supabase
-        .from('sessions')
-        .update({ 
+        .from("sessions")
+        .update({
           is_active: isActive,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
-        .eq('session_id', sessionId);
-  
+        .eq("session_id", sessionId);
+
       if (error) throw error;
     } catch (error) {
-      console.error('Error updating session:', error.message);
+      console.error("Error updating session:", error.message);
     }
-  };   
+  };
   const handleWeatherSuccess = (location, temperature) => {
     setWeatherSuccessMessage(
       `Weather fetched successfully: ${temperature}°C in ${location}`
@@ -1310,21 +1326,21 @@ const createSession = async () => {
                           ? "resume"
                           : "pause"
                         : "start";
-                  
+
                       if (action === "start") {
                         const sessionData = await createSession();
                         if (!sessionData) {
                           return;
                         }
                       }
-                  
+
                       const message = {
                         type: "simulation_control",
                         data: { action },
                       };
-                  
+
                       ws?.send(JSON.stringify(message));
-                  
+
                       if (action === "start") {
                         dispatch(setSimulationStatus(true));
                         dispatch(setSimulationPaused(false));
@@ -1334,7 +1350,7 @@ const createSession = async () => {
                         dispatch(setSimulationPaused(false));
                       }
                     } catch (error) {
-                      console.error('Error controlling simulation:', error);
+                      console.error("Error controlling simulation:", error);
                       setSessionError(error.message);
                     }
                   }}
@@ -1368,28 +1384,40 @@ const createSession = async () => {
                           type: "simulation_control",
                           data: { action: "stop" },
                         };
-                    
-                        const currentSessionData = JSON.parse(localStorage.getItem('session'));
+
+                        const currentSessionData = JSON.parse(
+                          localStorage.getItem("session")
+                        );
                         if (currentSessionData) {
                           // Calculate if simulation was successful
-                          const isSuccess = Math.abs(systemStatus.roomTemperature - roomParameters.targetTemp) <= 0.5;
-                          
+                          const isSuccess =
+                            Math.abs(
+                              systemStatus.roomTemperature -
+                                roomParameters.targetTemp
+                            ) <= 0.5;
+
                           // Save simulation data
-                          await saveSimulationData(currentSessionData.session_id, isSuccess);
-                          
+                          await saveSimulationData(
+                            currentSessionData.session_id,
+                            isSuccess
+                          );
+
                           // Update session status
-                          await updateSessionStatus(currentSessionData.session_id, false);
-                          
+                          await updateSessionStatus(
+                            currentSessionData.session_id,
+                            false
+                          );
+
                           // Clear session from localStorage
-                          localStorage.removeItem('session');
+                          localStorage.removeItem("session");
                           setCurrentSession(null);
                         }
-                    
+
                         ws?.send(JSON.stringify(message));
                         dispatch(setSimulationStatus(false));
                         dispatch(setSimulationPaused(false));
                       } catch (error) {
-                        console.error('Error stopping simulation:', error);
+                        console.error("Error stopping simulation:", error);
                         setSessionError(error.message);
                       }
                     }}

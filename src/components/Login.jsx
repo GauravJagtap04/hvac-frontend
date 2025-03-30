@@ -26,10 +26,10 @@ export default function Login() {
         email: formData.email,
         password: formData.password,
       });
-
       if (error) throw error;
 
       dispatch(setUser(data.user));
+      localStorage.setItem('user', JSON.stringify(data.user));
       navigate(from);
     } catch (error) {
       dispatch(setAuthError(error.message));

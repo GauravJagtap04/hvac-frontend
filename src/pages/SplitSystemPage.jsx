@@ -218,7 +218,7 @@ const saveSimulationData = async (sessionId, isSuccess) => {
 
     const simulationData = {
       session_id: sessionId,
-      type: 'Split System',
+      type: 'basic_hvac', // Changed from 'Split System' to match constraint
       parameters: {
         room: {
           length: roomParameters.length,
@@ -256,10 +256,10 @@ const saveSimulationData = async (sessionId, isSuccess) => {
     return data;
   } catch (error) {
     console.error('Error saving simulation data:', error.message);
+    setSessionError(error.message);
     throw error;
   }
 };
-
 // Modify the stop simulation button
 {isSimulationRunning ? (
   <Button

@@ -287,7 +287,7 @@ const saveSimulationData = async (sessionId, isSuccess) => {
 
     const simulationData = {
       session_id: sessionId,
-      type: 'Heat Pump',
+      type: 'advanced_havac',
       parameters: {
         room: {
           length: roomParameters.length,

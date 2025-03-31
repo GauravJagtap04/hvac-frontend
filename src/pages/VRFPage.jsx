@@ -19,6 +19,7 @@ import {
   useTheme,
   alpha,
   Snackbar,
+  FormHelperText,
   Alert,
 } from "@mui/material";
 import {
@@ -73,6 +74,34 @@ const SimulationPage = () => {
     breadth: false,
     height: false,
   });
+
+  const [zones, setZones] = useState([
+    {
+      name: "Zone 1",
+      targetTemp: 25,
+      demand: 5,
+      mode: null,
+      areaPercentage: 100,
+    },
+  ]);
+  const [zoneTemperatureData, setZoneTemperatureData] = useState([]);
+
+  useEffect(() => {
+    if (hvacParameters.zones) {
+      const initialZones = Object.entries(hvacParameters.zones).map(
+        ([name, demand]) => ({
+          name,
+          targetTemp: roomParameters.targetTemp,
+          demand,
+          mode: null,
+        })
+      );
+
+      if (initialZones.length > 0) {
+        setZones(initialZones);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (ws && isConnected && !isSimulationRunning) {
@@ -233,6 +262,28 @@ const SimulationPage = () => {
               },
             ].slice(-20)
           );
+
+          if (data.system_status.zone_data) {
+            setZoneTemperatureData((prev) => {
+              const newPoint = {
+                time: new Date().toLocaleTimeString(),
+              };
+
+              // Add temperature for each zone (both current and target)
+              Object.entries(data.system_status.zone_data).forEach(
+                ([zoneName, zoneData]) => {
+                  // Add current temperature
+                  newPoint[`${zoneName}_temp`] = zoneData.current_temperature;
+
+                  // Also add target temperature as a separate data point
+                  newPoint[`${zoneName}_target`] = zoneData.target_temperature;
+                }
+              );
+
+              // Keep only the last 20 data points
+              return [...prev, newPoint].slice(-20);
+            });
+          }
         } else if (data.temperature) {
           // Handle simple temperature updates
           setTemperatureData((prev) =>
@@ -291,7 +342,6 @@ const SimulationPage = () => {
     const newInvalidFields = { ...invalidFields };
 
     if (["length", "breadth", "height"].includes(parameter)) {
-      // For direct numeric inputs like from TextField, handle empty values
       let actualValue =
         typeof event.target?.value !== "undefined"
           ? event.target.value === ""
@@ -299,14 +349,11 @@ const SimulationPage = () => {
             : sanitizeNumericInput(event.target.value)
           : value;
 
-      // Convert NaN to 0 for better UX
       if (isNaN(actualValue)) actualValue = 0;
 
-      // Zero or negative values are invalid
       if (actualValue <= 0) {
         newInvalidFields[parameter] = true;
 
-        // Show error message for this field
         let paramName =
           parameter.charAt(0).toUpperCase() + parameter.substring(1);
         if (parameter === "breadth") paramName = "Width";
@@ -314,16 +361,12 @@ const SimulationPage = () => {
         setInvalidParameterOpen(true);
         setInvalidParameterMessage(`${paramName} cannot be zero or negative.`);
 
-        // Update the field value to 0 if it was empty
         if (event.target?.value === "") {
-          // Force a value of 0 instead of letting it be empty
           event.target.value = "0";
         }
 
-        // Don't send invalid value to backend, but update the UI
         setInvalidFields(newInvalidFields);
 
-        // Update Redux with the value for display purposes
         dispatch(
           updateRoomParameters({
             system: SYSTEM_TYPE,
@@ -332,7 +375,6 @@ const SimulationPage = () => {
         );
         return;
       } else {
-        // Clear the error for this field
         newInvalidFields[parameter] = false;
       }
     } else if (parameter === "numPeople") {
@@ -343,17 +385,14 @@ const SimulationPage = () => {
             : parseFloat(event.target.value)
           : value;
 
-      // Convert NaN to 0 for better UX
       if (isNaN(actualValue)) actualValue = 0;
 
-      // For numPeople, negative values are invalid (zero is valid)
       if (actualValue < 0) {
         newInvalidFields[parameter] = true;
         setInvalidParameterOpen(true);
         setInvalidParameterMessage("Number of people cannot be negative.");
         setInvalidFields(newInvalidFields);
 
-        // Update Redux with the value for display purposes
         dispatch(
           updateRoomParameters({
             system: SYSTEM_TYPE,
@@ -366,10 +405,8 @@ const SimulationPage = () => {
       }
     }
 
-    // Update invalid fields state
     setInvalidFields(newInvalidFields);
 
-    // Only proceed with sending to backend if no invalid fields
     dispatch(updateRoomParameters({ system: SYSTEM_TYPE, parameters: update }));
     if (!Object.values(newInvalidFields).some(Boolean)) {
       ws?.send(JSON.stringify({ type: "room_parameters", data: update }));
@@ -382,7 +419,6 @@ const SimulationPage = () => {
   const handleHVACParameterChange = (parameter) => (event, value) => {
     let update = {};
 
-    // Special handling for zones object
     if (parameter === "zones") {
       update = { [parameter]: event.target.value };
     } else {
@@ -392,13 +428,117 @@ const SimulationPage = () => {
     dispatch(updateHVACParameters({ system: SYSTEM_TYPE, parameters: update }));
     ws?.send(JSON.stringify({ type: "hvac_parameters", data: update }));
 
-    // Show warning if fan speed is set to zero
     if (parameter === "fanSpeed" && value === 0) {
       setFanSpeedWarning(true);
     } else if (parameter === "fanSpeed" && value > 0) {
       setFanSpeedWarning(false);
     }
   };
+
+  const handleAddZone = () => {
+    const zoneNumber = zones.length + 1;
+    const newZoneName = `Zone ${zoneNumber}`;
+
+    const newZone = {
+      name: newZoneName,
+      targetTemp: roomParameters.targetTemp,
+      demand: 5,
+      mode: null,
+    };
+
+    const newZones = [...zones, newZone];
+    setZones(newZones);
+
+    const newHvacZones = { ...hvacParameters.zones };
+    newHvacZones[newZoneName] = 5;
+    dispatch(
+      updateHVACParameters({
+        system: SYSTEM_TYPE,
+        parameters: { zones: newHvacZones },
+      })
+    );
+
+    ws?.send(
+      JSON.stringify({
+        type: "add_zone",
+        data: {
+          name: newZoneName,
+          target_temp: roomParameters.targetTemp,
+          demand: 5,
+        },
+      })
+    );
+
+    console.log("Added zone:", newZoneName);
+  };
+
+  const handleRemoveZone = () => {
+    if (zones.length <= 1) return;
+
+    const newZones = [...zones];
+    const removedZone = newZones.pop();
+    setZones(newZones);
+
+    ws?.send(
+      JSON.stringify({
+        type: "remove_zone",
+        data: {
+          name: removedZone.name,
+        },
+      })
+    );
+
+    console.log("Removed zone:", removedZone.name);
+  };
+
+  const handleZoneParameterChange = (index, parameter, value) => {
+    const newZones = [...zones];
+    newZones[index] = { ...newZones[index], [parameter]: value };
+    setZones(newZones);
+
+    if (parameter === "demand") {
+      const newHvacZones = { ...hvacParameters.zones };
+      newHvacZones[newZones[index].name] = value;
+      dispatch(
+        updateHVACParameters({
+          system: SYSTEM_TYPE,
+          parameters: { zones: newHvacZones },
+        })
+      );
+
+      ws?.send(
+        JSON.stringify({
+          type: "hvac_parameters",
+          data: { zones: newHvacZones },
+        })
+      );
+    }
+
+    if (parameter === "mode" && hvacParameters.heatRecovery) {
+      ws?.send(
+        JSON.stringify({
+          type: "zone_parameters",
+          data: {
+            zone_name: newZones[index].name,
+            mode: value,
+          },
+        })
+      );
+    }
+
+    if (parameter === "targetTemp") {
+      ws?.send(
+        JSON.stringify({
+          type: "zone_parameters",
+          data: {
+            zone_name: newZones[index].name,
+            target_temp: value,
+          },
+        })
+      );
+    }
+  };
+
   // Define StatusCard component inside VRFPage to access theme
   const StatusCard = ({ title, value, unit, icon }) => (
     <Paper
@@ -956,6 +1096,25 @@ const SimulationPage = () => {
             <Grid container spacing={4}>
               <Grid item xs={12}>
                 <Typography gutterBottom>
+                  Power: {hvacParameters.power} kW
+                </Typography>
+                <Slider
+                  value={hvacParameters.power}
+                  onChange={handleHVACParameterChange("power")}
+                  min={1}
+                  max={10}
+                  step={0.5}
+                  marks
+                  valueLabelDisplay="auto"
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    hasInvalidFields
+                  }
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
                   Maximum Capacity: {hvacParameters.maxCapacityKw} kW
                 </Typography>
                 <Slider
@@ -1009,120 +1168,6 @@ const SimulationPage = () => {
                     hasInvalidFields
                   }
                 />
-              </Grid>
-
-              <Grid item xs={12}>
-                <Typography gutterBottom>Zone Load Configuration</Typography>
-                {Object.entries(safeObject(hvacParameters.zones)).map(
-                  ([zone, load], index, array) => (
-                    <Box
-                      key={zone}
-                      sx={{
-                        mt: 2,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 2,
-                      }}
-                    >
-                      <TextField
-                        label={`${zone} Zone`}
-                        type="number"
-                        value={load}
-                        onChange={(e) => {
-                          const newZones = {
-                            ...hvacParameters.zones,
-                            [zone]:
-                              sanitizeNumericInput(e.target.value || 0) || 0, // Prevents NaN issues
-                          };
-                          handleHVACParameterChange("zones")({
-                            target: { value: newZones },
-                          });
-                        }}
-                        inputProps={{ step: 0.1, min: 0 }}
-                        sx={{
-                          flexGrow: 1,
-                          "& .MuiOutlinedInput-root": {
-                            "& fieldset": {
-                              borderColor: alpha(
-                                theme.palette.primary.main,
-                                0.2
-                              ),
-                            },
-                            "&:hover fieldset": {
-                              borderColor: alpha(
-                                theme.palette.primary.main,
-                                0.3
-                              ),
-                            },
-                          },
-                        }}
-                        disabled={
-                          (isSimulationRunning && !isSimulationPaused) ||
-                          hasInvalidFields
-                        }
-                      />
-                      <Typography>kW</Typography>
-                    </Box>
-                  )
-                )}
-
-                <Box sx={{ mt: 2, display: "flex", gap: 2 }}>
-                  {/* Add Zone Button */}
-                  <Button
-                    variant="outlined"
-                    onClick={() => {
-                      // Extract existing zone numbers
-                      const existingNumbers = Object.keys(hvacParameters.zones)
-                        .map((name) => parseInt(name.replace(/\D/g, ""), 10))
-                        .filter((num) => !isNaN(num));
-
-                      // Determine the next available zone number
-                      const nextNumber = existingNumbers.length
-                        ? Math.max(...existingNumbers) + 1
-                        : 1;
-                      const zoneName = `Zone ${nextNumber}`;
-
-                      const newZones = {
-                        ...hvacParameters.zones,
-                        [zoneName]: 0, // New zone starts at 0 kW
-                      };
-
-                      handleHVACParameterChange("zones")({
-                        target: { value: newZones },
-                      });
-                    }}
-                    disabled={
-                      (isSimulationRunning && !isSimulationPaused) ||
-                      hasInvalidFields
-                    }
-                  >
-                    Add Zone
-                  </Button>
-
-                  {/* Remove Zone Button */}
-                  <Button
-                    variant="outlined"
-                    color="error"
-                    onClick={() => {
-                      const zoneKeys = Object.keys(hvacParameters.zones);
-                      if (zoneKeys.length > 1) {
-                        const newZones = { ...hvacParameters.zones };
-                        delete newZones[zoneKeys[zoneKeys.length - 1]]; // Removes the last zone
-
-                        handleHVACParameterChange("zones")({
-                          target: { value: newZones },
-                        });
-                      }
-                    }}
-                    disabled={
-                      Object.keys(hvacParameters.zones).length <= 1 ||
-                      (isSimulationRunning && !isSimulationPaused) ||
-                      hasInvalidFields
-                    }
-                  >
-                    Remove Zone
-                  </Button>
-                </Box>
               </Grid>
 
               <Grid item xs={12}>
@@ -1184,6 +1229,7 @@ const SimulationPage = () => {
 
               <Grid item xs={12}>
                 <FormControlLabel
+                  label="Heat Recovery"
                   control={
                     <Switch
                       checked={hvacParameters.heatRecovery}
@@ -1200,11 +1246,303 @@ const SimulationPage = () => {
                       }
                     />
                   }
-                  label="Heat Recovery"
                   sx={{ mt: 2 }}
                 />
               </Grid>
+
+              <Grid item xs={12}>
+                <Typography gutterBottom>
+                  Heat Recovery Percentage:{" "}
+                  {hvacParameters.heatRecoveryPercentage}%
+                </Typography>
+                <Slider
+                  value={hvacParameters.heatRecoveryPercentage}
+                  onChange={handleHVACParameterChange("heatRecoveryPercentage")}
+                  min={1}
+                  max={100}
+                  step={1}
+                  marks
+                  valueLabelDisplay="auto"
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    hasInvalidFields
+                  }
+                />
+              </Grid>
             </Grid>
+          </Paper>
+        </Grid>
+
+        {zones.length > 0 && (
+          <>
+            {/* Each zone gets its own section */}
+            {zones.map((zone, index) => (
+              <Paper
+                key={zone.name}
+                sx={{
+                  p: 3,
+                  mb: 3,
+                  mt: 3,
+                  ml: 4,
+                  border: `1px solid ${alpha(
+                    theme.palette.primary.main,
+                    0.15
+                  )}`,
+                  borderRadius: 2,
+                }}
+              >
+                <Typography
+                  variant="h6"
+                  sx={{
+                    color: theme.palette.primary.main,
+                    fontWeight: "bold",
+                    mb: 2,
+                  }}
+                >
+                  {zone.name}
+                </Typography>
+
+                <Grid container spacing={3}>
+                  {/* Left side: Temperature graph for this zone */}
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle1" gutterBottom>
+                      Temperature Monitoring
+                    </Typography>
+                    <Paper
+                      sx={{
+                        p: 2,
+                        border: `1px solid ${alpha(
+                          theme.palette.primary.main,
+                          0.1
+                        )}`,
+                      }}
+                    >
+                      <ResponsiveContainer width="100%" height={400}>
+                        <LineChart data={zoneTemperatureData}>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke={alpha(theme.palette.text.primary, 0.1)}
+                          />
+                          <XAxis
+                            dataKey="time"
+                            stroke={theme.palette.text.secondary}
+                            tick={{ fill: theme.palette.text.secondary }}
+                          />
+                          <YAxis
+                            domain={[0, "auto"]}
+                            stroke={theme.palette.text.secondary}
+                            tick={{ fill: theme.palette.text.secondary }}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              background: alpha(
+                                theme.palette.background.paper,
+                                0.9
+                              ),
+                              border: `1px solid ${alpha(
+                                theme.palette.primary.main,
+                                0.1
+                              )}`,
+                              borderRadius: 8,
+                            }}
+                          />
+                          <Legend />
+                          <Line
+                            type="monotone"
+                            dataKey={`${zone.name}_temp`}
+                            name="Current Temperature"
+                            stroke={theme.palette.primary.main}
+                            dot={false}
+                            isAnimationActive={true}
+                            strokeWidth={3}
+                            activeDot={{ r: 8 }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey={`${zone.name}_target`}
+                            name="Target Temperature"
+                            stroke={theme.palette.secondary.main}
+                            strokeDasharray="5 5"
+                            dot={false}
+                            strokeWidth={2}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Paper>
+                  </Grid>
+
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle1" gutterBottom>
+                      Zone Parameters
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12}>
+                        <Typography gutterBottom>
+                          Target Temperature: {zone.targetTemp}°C
+                        </Typography>
+                        <Slider
+                          value={zone.targetTemp}
+                          onChange={(e, value) =>
+                            handleZoneParameterChange(
+                              index,
+                              "targetTemp",
+                              value
+                            )
+                          }
+                          min={16}
+                          max={30}
+                          step={0.5}
+                          marks
+                          valueLabelDisplay="auto"
+                          disabled={
+                            (isSimulationRunning && !isSimulationPaused) ||
+                            hasInvalidFields
+                          }
+                        />
+                      </Grid>
+
+                      <Grid item xs={12}>
+                        <Typography gutterBottom>
+                          Demand: {zone.demand} kW
+                        </Typography>
+                        <Slider
+                          value={zone.demand}
+                          onChange={(e, value) =>
+                            handleZoneParameterChange(index, "demand", value)
+                          }
+                          min={0.5}
+                          max={10}
+                          step={0.5}
+                          marks
+                          valueLabelDisplay="auto"
+                          disabled={
+                            (isSimulationRunning && !isSimulationPaused) ||
+                            hasInvalidFields
+                          }
+                        />
+                      </Grid>
+
+                      {/* Mode selection */}
+                      <Grid item xs={12}>
+                        <FormControl fullWidth>
+                          <InputLabel
+                            sx={{
+                              backgroundColor: theme.palette.background.paper,
+                              padding: "0 6px",
+                            }}
+                          >
+                            Mode
+                          </InputLabel>
+                          <Select
+                            value={zone.mode || roomParameters.mode}
+                            onChange={(e) =>
+                              handleZoneParameterChange(
+                                index,
+                                "mode",
+                                e.target.value
+                              )
+                            }
+                            disabled={
+                              (isSimulationRunning && !isSimulationPaused) ||
+                              hasInvalidFields ||
+                              !hvacParameters.heatRecovery
+                            }
+                          >
+                            <MenuItem value="cooling">Cooling</MenuItem>
+                            <MenuItem value="heating">Heating</MenuItem>
+                          </Select>
+                          {!hvacParameters.heatRecovery && (
+                            <FormHelperText>
+                              Enable heat recovery to set individual zone modes
+                            </FormHelperText>
+                          )}
+                        </FormControl>
+                      </Grid>
+                    </Grid>
+                  </Grid>
+                </Grid>
+              </Paper>
+            ))}
+          </>
+        )}
+
+        <Grid item xs={12}>
+          <Paper
+            sx={{
+              p: 4,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              background: alpha(theme.palette.background.paper, 0.8),
+              backdropFilter: "blur(10px)",
+              borderRadius: 2,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "row",
+                gap: 2,
+                justifyContent: "center",
+              }}
+            >
+              <Grid item xs={12} container>
+                <Button
+                  variant="contained"
+                  size="large"
+                  color="primary"
+                  onClick={handleAddZone}
+                  disabled={isSimulationRunning || hasInvalidFields}
+                  sx={{
+                    px: 4,
+                    py: 2,
+                    fontSize: "1.1rem",
+                    fontWeight: "bold",
+                    borderRadius: 2,
+                    textTransform: "none",
+                    whiteSpace: "none",
+                    boxShadow: `0 4px 10px ${alpha(
+                      theme.palette.primary.main,
+                      0.4
+                    )}`,
+                    opacity: hasInvalidFields ? 0.6 : 1,
+                  }}
+                >
+                  Add Zone
+                </Button>
+              </Grid>
+
+              <Grid item xs={12} container>
+                <Button
+                  variant="contained"
+                  size="large"
+                  color="error"
+                  onClick={handleRemoveZone}
+                  disabled={
+                    isSimulationRunning ||
+                    hasInvalidFields ||
+                    Object.keys(zones).length <= 1
+                  }
+                  sx={{
+                    px: 4,
+                    py: 2,
+                    fontSize: "1.1rem",
+                    fontWeight: "bold",
+                    borderRadius: 2,
+                    textTransform: "none",
+                    whiteSpace: "nowrap",
+                    boxShadow: `0 4px 10px ${alpha(
+                      theme.palette.error.main,
+                      0.4
+                    )}`,
+                    opacity: hasInvalidFields ? 0.6 : 1,
+                  }}
+                >
+                  Remove Zone
+                </Button>
+              </Grid>
+            </Box>
           </Paper>
         </Grid>
 

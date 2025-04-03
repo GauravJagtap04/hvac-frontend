@@ -2,8 +2,8 @@ import React, { useState } from "react";
 import { useDispatch } from "react-redux";
 import { Button, CircularProgress, Box, Tooltip } from "@mui/material";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
-import { getCurrentLocationWeather } from "../../utilities/weatherService";
-// import { weatherService } from "@/utilities/weatherService";
+// import { getCurrentLocationWeather } from "../../utilities/weatherService";
+import { getCurrentLocationWeather } from "@/utilities/weatherService";
 import { updateRoomParameters } from "../store/store";
 
 const WeatherIntegration = ({

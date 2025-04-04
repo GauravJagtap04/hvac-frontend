@@ -246,7 +246,7 @@ const SimulationPage = () => {
     }
 
     const websocket = new WebSocket(
-      `ws://localhost:8000/ws/${user.id}/split-system`
+      `ws://64.227.132.1/ws/${user.id}/split-system`
     );
 
     websocket.onopen = () => {

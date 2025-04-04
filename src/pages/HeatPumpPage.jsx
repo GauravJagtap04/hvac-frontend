@@ -304,7 +304,7 @@ const SimulationPage = () => {
 
       const simulationData = {
         session_id: sessionId,
-        type: "advanced_hvac",
+        type: "heat-pump-system",
         parameters: {
           room: {
             length: roomParameters.length,

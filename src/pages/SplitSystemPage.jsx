@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { supabase } from "../components/SupabaseClient";
+import { useNavigate } from "react-router-dom";
+
 import {
   Box,
   Grid,
@@ -46,6 +48,7 @@ const SYSTEM_TYPE = "splitSystem";
 const SimulationPage = () => {
   const theme = useTheme();
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { isConnected, isSimulationRunning, isSimulationPaused } = useSelector(
     (state) => state.hvac
   );
@@ -66,6 +69,9 @@ const SimulationPage = () => {
   const [fanSpeedWarning, setFanSpeedWarning] = useState(false);
   const [invalidParameterMessage, setInvalidParameterMessage] = useState("");
   const [errorStartingSimulation, setErrorStartingSimulation] = useState(false);
+  const [currentSession, setCurrentSession] = useState(null);
+  const [sessionError, setSessionError] = useState(null);
+  const [authError, setAuthError] = useState(null);
   const [invalidFields, setInvalidFields] = useState({
     length: false,
     breadth: false,
@@ -73,7 +79,12 @@ const SimulationPage = () => {
   });
 
   useEffect(() => {
-    if (ws && isConnected && !isSimulationRunning) {
+    if (
+      ws &&
+      isConnected &&
+      !isSimulationRunning &&
+      ws.readyState === WebSocket.OPEN
+    ) {
       ws.send(
         JSON.stringify({
           type: "room_parameters",
@@ -125,14 +136,12 @@ const SimulationPage = () => {
     }
     return () => clearInterval(timer);
   }, [isSimulationRunning, isSimulationPaused, countdownTime]);
-  // Add these state variables with your other useState declarations at the top of the component
-  const [currentSession, setCurrentSession] = useState(null);
-  const [sessionError, setSessionError] = useState(null);
 
-  // Update the createSession function
   const createSession = async () => {
     try {
-      const user = JSON.parse(localStorage.getItem("user"));
+      const activeUserId = sessionStorage.getItem("activeUserId");
+      const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
+
       if (!user) {
         throw new Error("User not authenticated");
       }
@@ -157,7 +166,8 @@ const SimulationPage = () => {
           .single();
 
         if (error) throw error;
-        localStorage.setItem("session", JSON.stringify(data));
+
+        sessionStorage.setItem(`${user.id}_session`, JSON.stringify(data));
         return data;
       }
 
@@ -168,25 +178,14 @@ const SimulationPage = () => {
       return null;
     }
   };
-  const updateSessionStatus = async (sessionId, isActive = false) => {
-    try {
-      const { error } = await supabase
-        .from("sessions")
-        .update({
-          is_active: isActive,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("session_id", sessionId);
 
-      if (error) throw error;
-    } catch (error) {
-      console.error("Error updating session:", error.message);
-    }
-  };
   useEffect(() => {
     if (isSimulationRunning && !isSimulationPaused) {
       const currentTemp = systemStatus.roomTemperature;
       const targetTemp = systemStatus.targetTemperature;
+
+      const activeUserId = sessionStorage.getItem("activeUserId");
+      const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
 
       if (Math.abs(currentTemp - targetTemp) == 0) {
         setTargetReachAlert(true);
@@ -196,7 +195,10 @@ const SimulationPage = () => {
             data: { action: "stop" },
           })
         );
-        const currentSessionData = JSON.parse(localStorage.getItem("session"));
+
+        const currentSessionData = JSON.parse(
+          sessionStorage.getItem(`${user.id}_session`)
+        );
         if (currentSessionData) {
           saveSimulationData(currentSessionData.session_id, true)
             .then(() => {
@@ -204,8 +206,8 @@ const SimulationPage = () => {
               return updateSessionStatus(currentSessionData.session_id, false);
             })
             .then(() => {
-              // Clear session from localStorage
-              localStorage.removeItem("session");
+              // Clear session from sessionStorage
+              sessionStorage.removeItem(`${user.id}_session`);
               setCurrentSession(null);
             })
             .catch((error) => {
@@ -223,126 +225,32 @@ const SimulationPage = () => {
     isSimulationRunning,
     isSimulationPaused,
   ]);
-  // Add this function near your other utility functions
-  const saveSimulationData = async (sessionId, isSuccess) => {
-    try {
-      const user = JSON.parse(localStorage.getItem("user"));
-      if (!user) {
-        throw new Error("User not authenticated");
-      }
 
-      const simulationData = {
-        session_id: sessionId,
-        type: "basic_hvac", // Changed from 'Split System' to match constraint
-        parameters: {
-          room: {
-            length: roomParameters.length,
-            breadth: roomParameters.breadth,
-            height: roomParameters.height,
-            numPeople: roomParameters.numPeople,
-            mode: roomParameters.mode,
-            wallInsulation: roomParameters.wallInsulation,
-            currentTemp: roomParameters.currentTemp,
-            targetTemp: roomParameters.targetTemp,
-            externalTemp: roomParameters.externalTemp,
-          },
-          hvac: {
-            power: hvacParameters.power,
-            airFlowRate: hvacParameters.airFlowRate,
-            fanSpeed: hvacParameters.fanSpeed,
-          },
-          results: {
-            finalTemperature: systemStatus.roomTemperature,
-            energyConsumption: systemStatus.energyConsumptionW,
-            cop: systemStatus.cop,
-            refrigerantFlow: systemStatus.refrigerantFlowGs,
-          },
-        },
-        userid: user.id,
-        is_success: isSuccess,
-      };
-
-      const { data, error } = await supabase
-        .from("simulations")
-        .insert([simulationData])
-        .select();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error("Error saving simulation data:", error.message);
-      setSessionError(error.message);
-      throw error;
-    }
-  };
-  // Modify the stop simulation button
-  {
-    isSimulationRunning ? (
-      <Button
-        variant="contained"
-        size="large"
-        color="error"
-        onClick={async () => {
-          try {
-            const message = {
-              type: "simulation_control",
-              data: {
-                action: "stop",
-              },
-            };
-
-            // Get current session from localStorage
-            const currentSession = JSON.parse(localStorage.getItem("session"));
-
-            if (currentSession) {
-              // Calculate if simulation was successful (target temperature reached)
-              const isSuccess =
-                Math.abs(
-                  systemStatus.roomTemperature - roomParameters.targetTemp
-                ) <= 0.5;
-
-              // Save simulation data
-              await saveSimulationData(currentSession.session_id, isSuccess);
-
-              // Update session status
-              await supabase
-                .from("sessions")
-                .update({ is_active: false })
-                .eq("session_id", currentSession.session_id);
-
-              // Clear session from localStorage
-              localStorage.removeItem("session");
-            }
-
-            ws?.send(JSON.stringify(message));
-            dispatch(setSimulationStatus(false));
-            dispatch(setSimulationPaused(false));
-          } catch (error) {
-            console.error("Error stopping simulation:", error);
-            setSessionError(error.message);
-          }
-        }}
-        sx={{
-          px: 6,
-          py: 2,
-          fontSize: "1.2rem",
-          fontWeight: "bold",
-          borderRadius: 2,
-          textTransform: "none",
-          marginLeft: 2,
-          boxShadow: `0 0 20px ${alpha(theme.palette.error.main, 0.4)}`,
-        }}
-      >
-        Stop Simulation
-      </Button>
-    ) : null;
-  }
   useEffect(() => {
+    const activeUserId = sessionStorage.getItem("activeUserId");
+
+    if (!activeUserId) {
+      console.error("No active user ID found");
+      setAuthError("User not authenticated. Please log in.");
+      navigate("/login");
+      return;
+    }
+
+    const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
+
+    if (!user || !user.id) {
+      console.error("No user data found");
+      setAuthError("User not authenticated. Please log in.");
+      navigate("/login");
+      return;
+    }
+
     const websocket = new WebSocket(
-      "ws://localhost:8000/ws?system_type=split-system"
+      `ws://localhost:8000/ws/${user.id}/split-system`
     );
 
     websocket.onopen = () => {
+      setAuthError(null);
       dispatch(setConnectionStatus(true));
       console.log("Connected to split system HVAC simulator");
     };
@@ -407,16 +315,23 @@ const SimulationPage = () => {
       }
     };
 
+    websocket.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      dispatch(setConnectionStatus(false));
+      setAuthError("Connection error. Please try again.");
+    };
+
     websocket.onclose = () => {
       dispatch(setConnectionStatus(false));
-
       console.log("Disconnected from split system HVAC simulator");
     };
 
     setWs(websocket);
 
     return () => {
-      websocket.close();
+      if (websocket && websocket.readyState === WebSocket.OPEN) {
+        websocket.close();
+      }
     };
   }, [dispatch]);
 
@@ -430,6 +345,76 @@ const SimulationPage = () => {
     const sanitized = parseFloat(parsedValue.toString());
 
     return sanitized;
+  };
+
+  const updateSessionStatus = async (sessionId, isActive = false) => {
+    try {
+      const { error } = await supabase
+        .from("sessions")
+        .update({
+          is_active: isActive,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("session_id", sessionId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error("Error updating session:", error.message);
+    }
+  };
+
+  const saveSimulationData = async (sessionId, isSuccess) => {
+    try {
+      const activeUserId = sessionStorage.getItem("activeUserId");
+      const user = JSON.parse(sessionStorage.getItem(`{user_${activeUserId}`));
+
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      const simulationData = {
+        session_id: sessionId,
+        type: "split-system",
+        parameters: {
+          room: {
+            length: roomParameters.length,
+            breadth: roomParameters.breadth,
+            height: roomParameters.height,
+            numPeople: roomParameters.numPeople,
+            mode: roomParameters.mode,
+            wallInsulation: roomParameters.wallInsulation,
+            currentTemp: roomParameters.currentTemp,
+            targetTemp: roomParameters.targetTemp,
+            externalTemp: roomParameters.externalTemp,
+          },
+          hvac: {
+            power: hvacParameters.power,
+            airFlowRate: hvacParameters.airFlowRate,
+            fanSpeed: hvacParameters.fanSpeed,
+          },
+          results: {
+            finalTemperature: systemStatus.roomTemperature,
+            energyConsumption: systemStatus.energyConsumptionW,
+            cop: systemStatus.cop,
+            refrigerantFlow: systemStatus.refrigerantFlowGs,
+          },
+        },
+        userid: user.id,
+        is_success: isSuccess,
+      };
+
+      const { data, error } = await supabase
+        .from("simulations")
+        .insert([simulationData])
+        .select();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error("Error saving simulation data:", error.message);
+      setSessionError(error.message);
+      throw error;
+    }
   };
 
   const handleWeatherError = (errorMessage) => {
@@ -607,6 +592,23 @@ const SimulationPage = () => {
         } 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`,
       }}
     >
+      {authError && (
+        <Alert
+          severity="error"
+          sx={{ mb: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => navigate("/login")}
+            >
+              Login
+            </Button>
+          }
+        >
+          {authError}
+        </Alert>
+      )}
       <Grid container spacing={4}>
         <Grid item xs={12}>
           <Box
@@ -1282,9 +1284,15 @@ const SimulationPage = () => {
                           },
                         };
 
-                        // Get current session from localStorage
+                        const activeUserId =
+                          sessionStorage.getItem("activeUserId");
+                        const user = JSON.parse(
+                          sessionStorage.getItem(`user_${activeUserId}`)
+                        );
+
+                        // Get current session from sessionStorage
                         const currentSession = JSON.parse(
-                          localStorage.getItem("session")
+                          sessionStorage.getItem(`${user.id}_session`)
                         );
 
                         if (currentSession) {
@@ -1307,8 +1315,8 @@ const SimulationPage = () => {
                             .update({ is_active: false })
                             .eq("session_id", currentSession.session_id);
 
-                          // Clear session from localStorage
-                          localStorage.removeItem("session");
+                          // Clear session from sessionStorage
+                          sessionStorage.removeItem(`${user.id}_session`);
                         }
 
                         ws?.send(JSON.stringify(message));

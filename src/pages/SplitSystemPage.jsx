@@ -245,8 +245,10 @@ const SimulationPage = () => {
       return;
     }
 
+    // Determine the WebSocket protocol based on the page's protocol
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const websocket = new WebSocket(
-      `ws://64.227.132.1/ws/${user.id}/split-system`
+      `${protocol}//64.227.132.1/ws/${user.id}/split-system`
     );
 
     websocket.onopen = () => {

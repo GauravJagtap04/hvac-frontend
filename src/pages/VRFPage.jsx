@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { supabase } from "../components/SupabaseClient";
 import {
   Box,
   Grid,
@@ -73,7 +74,23 @@ const SimulationPage = () => {
     breadth: false,
     height: false,
   });
+  const [sessionError, setSessionError] = useState(null);
+  const [currentSession, setCurrentSession] = useState(null);
+  const updateSessionStatus = async (sessionId, isActive = false) => {
+    try {
+      const { error } = await supabase
+        .from("sessions")
+        .update({
+          is_active: isActive,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("session_id", sessionId);
 
+      if (error) throw error;
+    } catch (error) {
+      console.error("Error updating session:", error.message);
+    }
+  };
   useEffect(() => {
     if (ws && isConnected && !isSimulationRunning) {
       ws.send(
@@ -93,6 +110,70 @@ const SimulationPage = () => {
         })
       );
 
+      const saveSimulationData = async (sessionId, isSuccess) => {
+        try {
+          const activeUserId = sessionStorage.getItem("activeUserId");
+          console.log("Active User ID:", activeUserId);
+          // const user = JSON.parse(sessionStorage.getItem(`{user_${activeUserId}`));
+
+          const simulationData = {
+            session_id: sessionId,
+            type: "split-system",
+            parameters: {
+              room: {
+                length: roomParameters.length,
+                breadth: roomParameters.breadth,
+                height: roomParameters.height,
+                numPeople: roomParameters.numPeople,
+                mode: roomParameters.mode,
+                wallInsulation: roomParameters.wallInsulation,
+                currentTemp: roomParameters.currentTemp,
+                targetTemp: roomParameters.targetTemp,
+                externalTemp: roomParameters.externalTemp,
+              },
+              hvac: {
+                power: hvacParameters.power,
+                airFlowRate: hvacParameters.airFlowRate,
+                fanSpeed: hvacParameters.fanSpeed,
+              },
+              results: {
+                finalTemperature: systemStatus.roomTemperature,
+                energyConsumption: systemStatus.energyConsumptionW,
+                cop: systemStatus.cop,
+                refrigerantFlow: systemStatus.refrigerantFlowGs,
+              },
+            },
+            userid: activeUserId,
+            is_success: isSuccess,
+          };
+          const updateSessionStatus = async (sessionId, isActive = false) => {
+            try {
+              const { error } = await supabase
+                .from("sessions")
+                .update({
+                  is_active: isActive,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("session_id", sessionId);
+
+              if (error) throw error;
+            } catch (error) {
+              console.error("Error updating session:", error.message);
+            }
+          };
+          const { data, error } = await supabase
+            .from("simulations")
+            .insert([simulationData])
+            .select();
+
+          if (error) throw error;
+          return data;
+        } catch (error) {
+          console.error("Error saving simulation data:", error.message);
+          setSessionError(error.message);
+          throw error;
+        }
+      };
       ws.send(
         JSON.stringify({
           type: "hvac_parameters",
@@ -168,10 +249,15 @@ const SimulationPage = () => {
   ]);
 
   useEffect(() => {
+    // const websocket = new WebSocket(
+    //   "ws://localhost:8000/ws?system_type=variable-refrigerant-flow-system"
+    // );
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const activeUserId = sessionStorage.getItem("activeUserId");
+    const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
     const websocket = new WebSocket(
-      "ws://localhost:8000/ws?system_type=variable-refrigerant-flow-system"
+      `${protocol}//localhost:8000/ws/${user}/variable-refrigerant-flow-system`
     );
-
     websocket.onopen = () => {
       dispatch(setConnectionStatus(true));
       console.log("Connected to VRF system simulator");
@@ -305,12 +391,10 @@ const SimulationPage = () => {
       // Zero or negative values are invalid
       if (actualValue <= 0) {
         newInvalidFields[parameter] = true;
-
         // Show error message for this field
         let paramName =
           parameter.charAt(0).toUpperCase() + parameter.substring(1);
         if (parameter === "breadth") paramName = "Width";
-
         setInvalidParameterOpen(true);
         setInvalidParameterMessage(`${paramName} cannot be zero or negative.`);
 
@@ -368,7 +452,6 @@ const SimulationPage = () => {
 
     // Update invalid fields state
     setInvalidFields(newInvalidFields);
-
     // Only proceed with sending to backend if no invalid fields
     dispatch(updateRoomParameters({ system: SYSTEM_TYPE, parameters: update }));
     if (!Object.values(newInvalidFields).some(Boolean)) {
@@ -399,6 +482,7 @@ const SimulationPage = () => {
       setFanSpeedWarning(false);
     }
   };
+
   // Define StatusCard component inside VRFPage to access theme
   const StatusCard = ({ title, value, unit, icon }) => (
     <Paper
@@ -446,6 +530,99 @@ const SimulationPage = () => {
       </Typography>
     </Paper>
   );
+
+  const createSession = async () => {
+    try {
+      const activeUserId = sessionStorage.getItem("activeUserId");
+      const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      const { data: existingSession, error: fetchError } = await supabase
+        .from("sessions")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .single();
+
+      if (!existingSession) {
+        const { data, error } = await supabase
+          .from("sessions")
+          .insert([
+            {
+              user_id: user.id,
+              is_active: true,
+            },
+          ])
+          .select()
+          .single();
+
+        if (error) throw error;
+        localStorage.setItem("session", JSON.stringify(data));
+        return data;
+      }
+
+      return existingSession;
+    } catch (error) {
+      console.error("Error creating session:", error.message);
+      setSessionError(error.message);
+      return null;
+    }
+  };
+
+  const saveSimulationData = async (sessionId, isSuccess) => {
+    try {
+      const activeUserId = sessionStorage.getItem("activeUserId");
+      const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      const simulationData = {
+        session_id: sessionId,
+        type: "variable-refrigerant-flow-system",
+        parameters: {
+          room: {
+            length: roomParameters.length,
+            breadth: roomParameters.breadth,
+            height: roomParameters.height,
+            numPeople: roomParameters.numPeople,
+            mode: roomParameters.mode,
+            wallInsulation: roomParameters.wallInsulation,
+            currentTemp: roomParameters.currentTemp,
+            targetTemp: roomParameters.targetTemp,
+            externalTemp: roomParameters.externalTemp,
+          },
+          hvac: {
+            power: hvacParameters.power,
+            airFlowRate: hvacParameters.airFlowRate,
+            fanSpeed: hvacParameters.fanSpeed,
+          },
+          results: {
+            finalTemperature: systemStatus.roomTemperature,
+            energyConsumption: systemStatus.energyConsumptionW,
+            cop: systemStatus.cop,
+            refrigerantFlow: systemStatus.refrigerantFlowGs,
+          },
+        },
+        userid: user.id,
+        is_success: isSuccess,
+      };
+
+      const { data, error } = await supabase
+        .from("simulations")
+        .insert([simulationData])
+        .select();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error("Error saving simulation data:", error.message);
+      setSessionError(error.message);
+      throw error;
+    }
+  };
 
   return (
     <Box
@@ -677,7 +854,7 @@ const SimulationPage = () => {
                   error={invalidFields.breadth}
                   helperText={
                     invalidFields.breadth
-                      ? "Width cannot be zero or negative"
+                      ? "Width cannot be zero or negative."
                       : ""
                   }
                   disabled={
@@ -707,7 +884,6 @@ const SimulationPage = () => {
                   }}
                 />
               </Grid>
-
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -717,7 +893,7 @@ const SimulationPage = () => {
                   error={invalidFields.height}
                   helperText={
                     invalidFields.height
-                      ? "Height cannot be zero or negative"
+                      ? "Height cannot be zero or negative."
                       : ""
                   }
                   disabled={
@@ -776,7 +952,6 @@ const SimulationPage = () => {
                   }}
                 />
               </Grid>
-
               <Grid item xs={12} sm={6}>
                 <FormControl
                   fullWidth
@@ -790,6 +965,10 @@ const SimulationPage = () => {
                       },
                     },
                   }}
+                  disabled={
+                    (isSimulationRunning && !isSimulationPaused) ||
+                    hasInvalidFields
+                  }
                 >
                   <InputLabel
                     sx={{
@@ -859,7 +1038,6 @@ const SimulationPage = () => {
                   </Select>
                 </FormControl>
               </Grid>
-
               <Grid item xs={12}>
                 <Typography gutterBottom>
                   Current Room Temperature: {roomParameters.currentTemp}°C
@@ -878,7 +1056,6 @@ const SimulationPage = () => {
                   }
                 />
               </Grid>
-
               <Grid item xs={12}>
                 <Typography gutterBottom>
                   Target Temperature: {roomParameters.targetTemp}°C
@@ -897,7 +1074,6 @@ const SimulationPage = () => {
                   }
                 />
               </Grid>
-
               <Grid item xs={12}>
                 <Typography gutterBottom>
                   External Temperature: {roomParameters.externalTemp}°C
@@ -1065,7 +1241,6 @@ const SimulationPage = () => {
                     </Box>
                   )
                 )}
-
                 <Box sx={{ mt: 2, display: "flex", gap: 2 }}>
                   {/* Add Zone Button */}
                   <Button
@@ -1081,12 +1256,10 @@ const SimulationPage = () => {
                         ? Math.max(...existingNumbers) + 1
                         : 1;
                       const zoneName = `Zone ${nextNumber}`;
-
                       const newZones = {
                         ...hvacParameters.zones,
                         [zoneName]: 0, // New zone starts at 0 kW
                       };
-
                       handleHVACParameterChange("zones")({
                         target: { value: newZones },
                       });
@@ -1098,7 +1271,6 @@ const SimulationPage = () => {
                   >
                     Add Zone
                   </Button>
-
                   {/* Remove Zone Button */}
                   <Button
                     variant="outlined"
@@ -1108,7 +1280,6 @@ const SimulationPage = () => {
                       if (zoneKeys.length > 1) {
                         const newZones = { ...hvacParameters.zones };
                         delete newZones[zoneKeys[zoneKeys.length - 1]]; // Removes the last zone
-
                         handleHVACParameterChange("zones")({
                           target: { value: newZones },
                         });
@@ -1240,27 +1411,39 @@ const SimulationPage = () => {
                     ) : null
                   }
                   disabled={hasInvalidFields}
-                  onClick={() => {
-                    const action = isSimulationRunning
-                      ? isSimulationPaused
-                        ? "resume"
-                        : "pause"
-                      : "start";
+                  onClick={async () => {
+                    try {
+                      const action = isSimulationRunning
+                        ? isSimulationPaused
+                          ? "resume"
+                          : "pause"
+                        : "start";
 
-                    const message = {
-                      type: "simulation_control",
-                      data: { action },
-                    };
+                      if (action === "start") {
+                        const sessionData = await createSession();
+                        if (!sessionData) {
+                          return;
+                        }
+                      }
 
-                    ws?.send(JSON.stringify(message));
+                      const message = {
+                        type: "simulation_control",
+                        data: { action },
+                      };
 
-                    if (action === "start") {
-                      dispatch(setSimulationStatus(true));
-                      dispatch(setSimulationPaused(false));
-                    } else if (action === "pause") {
-                      dispatch(setSimulationPaused(true));
-                    } else if (action === "resume") {
-                      dispatch(setSimulationPaused(false));
+                      ws?.send(JSON.stringify(message));
+
+                      if (action === "start") {
+                        dispatch(setSimulationStatus(true));
+                        dispatch(setSimulationPaused(false));
+                      } else if (action === "pause") {
+                        dispatch(setSimulationPaused(true));
+                      } else if (action === "resume") {
+                        dispatch(setSimulationPaused(false));
+                      }
+                    } catch (error) {
+                      console.error("Error controlling simulation:", error);
+                      setSessionError(error.message);
                     }
                   }}
                   sx={{
@@ -1274,6 +1457,7 @@ const SimulationPage = () => {
                       ? `0 0 20px ${alpha(theme.palette.error.main, 0.4)}`
                       : `0 0 20px ${alpha(theme.palette.primary.main, 0.4)}`,
                     opacity: hasInvalidFields ? 0.6 : 1,
+                    mr: 2, // Add margin to separate buttons
                   }}
                 >
                   {isSimulationRunning
@@ -1287,16 +1471,48 @@ const SimulationPage = () => {
                     variant="contained"
                     size="large"
                     color="error"
-                    onClick={() => {
-                      const message = {
-                        type: "simulation_control",
-                        data: {
-                          action: "stop",
-                        },
-                      };
-                      ws?.send(JSON.stringify(message));
-                      dispatch(setSimulationStatus(false));
-                      dispatch(setSimulationPaused(false));
+                    onClick={async () => {
+                      try {
+                        const message = {
+                          type: "simulation_control",
+                          data: { action: "stop" },
+                        };
+
+                        const currentSessionData = JSON.parse(
+                          localStorage.getItem("session")
+                        );
+                        if (currentSessionData) {
+                          // Calculate if simulation was successful
+                          const isSuccess =
+                            Math.abs(
+                              systemStatus.roomTemperature -
+                                roomParameters.targetTemp
+                            ) <= 0.5;
+
+                          // Save simulation data
+                          await saveSimulationData(
+                            currentSessionData.session_id,
+                            isSuccess
+                          );
+
+                          // Update session status
+                          await updateSessionStatus(
+                            currentSessionData.session_id,
+                            false
+                          );
+
+                          // Clear session from localStorage
+                          localStorage.removeItem("session");
+                          setCurrentSession(null);
+                        }
+
+                        ws?.send(JSON.stringify(message));
+                        dispatch(setSimulationStatus(false));
+                        dispatch(setSimulationPaused(false));
+                      } catch (error) {
+                        console.error("Error stopping simulation:", error);
+                        setSessionError(error.message);
+                      }
                     }}
                     sx={{
                       px: 6,
@@ -1305,18 +1521,16 @@ const SimulationPage = () => {
                       fontWeight: "bold",
                       borderRadius: 2,
                       textTransform: "none",
-                      marginLeft: 2,
                       boxShadow: `0 0 20px ${alpha(
                         theme.palette.error.main,
                         0.4
                       )}`,
+                      opacity: hasInvalidFields ? 0.6 : 1,
                     }}
                   >
                     Stop Simulation
                   </Button>
-                ) : (
-                  ""
-                )}
+                ) : null}
               </Grid>
               {countdownTime > 0 && (
                 <Box

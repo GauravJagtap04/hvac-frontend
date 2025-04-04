@@ -248,9 +248,9 @@ const SimulationPage = () => {
     // Determine the WebSocket protocol based on the page's protocol
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const websocket = new WebSocket(
-      `${protocol}//gauravjagtap.me/ws/${user.id}/split-system`
+      `${protocol}//localhost:8000/ws/${user.id}/split-system`
     );
-    
+
     websocket.onopen = () => {
       setAuthError(null);
       dispatch(setConnectionStatus(true));
@@ -368,11 +368,8 @@ const SimulationPage = () => {
   const saveSimulationData = async (sessionId, isSuccess) => {
     try {
       const activeUserId = sessionStorage.getItem("activeUserId");
-      const user = JSON.parse(sessionStorage.getItem(`{user_${activeUserId}`));
-
-      if (!user) {
-        throw new Error("User not authenticated");
-      }
+      console.log("Active User ID:", activeUserId);
+      // const user = JSON.parse(sessionStorage.getItem(`{user_${activeUserId}`));
 
       const simulationData = {
         session_id: sessionId,
@@ -401,7 +398,7 @@ const SimulationPage = () => {
             refrigerantFlow: systemStatus.refrigerantFlowGs,
           },
         },
-        userid: user.id,
+        userid: activeUserId,
         is_success: isSuccess,
       };
 

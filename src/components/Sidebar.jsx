@@ -48,6 +48,8 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
 
   const handleLogout = async () => {
     try {
+      sessionStorage.clear();
+
       await supabase.auth.signOut();
       dispatch(logout());
       navigate("/login");

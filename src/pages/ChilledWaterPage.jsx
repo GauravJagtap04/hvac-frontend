@@ -165,7 +165,7 @@ const SimulationPage = () => {
     const activeUserId = sessionStorage.getItem("activeUserId");
     const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
     const websocket = new WebSocket(
-      `${protocol}//localhost:8000/ws/${user}/variable-refrigerant-flow-system`
+      `${protocol}//gauravjagtap.me/ws/${user}/variable-refrigerant-flow-system`
     );
 
     websocket.onopen = () => {
@@ -1397,18 +1397,30 @@ const SimulationPage = () => {
                           data: { action: "stop" },
                         };
 
-                        const activeUserId = sessionStorage.getItem("activeUserId");
-                        const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
+                        const activeUserId =
+                          sessionStorage.getItem("activeUserId");
+                        const user = JSON.parse(
+                          sessionStorage.getItem(`user_${activeUserId}`)
+                        );
                         const currentSession = JSON.parse(
                           sessionStorage.getItem(`${user.id}_session`)
                         );
 
                         if (currentSession) {
                           const isSuccess =
-                            Math.abs(systemStatus.roomTemperature - roomParameters.targetTemp) <= 0.5;
+                            Math.abs(
+                              systemStatus.roomTemperature -
+                                roomParameters.targetTemp
+                            ) <= 0.5;
 
-                          await saveSimulationData(currentSession.session_id, isSuccess);
-                          await updateSessionStatus(currentSession.session_id, false);
+                          await saveSimulationData(
+                            currentSession.session_id,
+                            isSuccess
+                          );
+                          await updateSessionStatus(
+                            currentSession.session_id,
+                            false
+                          );
                           sessionStorage.removeItem(`${user.id}_session`);
                         }
 

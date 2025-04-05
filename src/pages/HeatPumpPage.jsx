@@ -180,7 +180,7 @@ const SimulationPage = () => {
     const activeUserId = sessionStorage.getItem("activeUserId");
     const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
     const websocket = new WebSocket(
-      `${protocol}//localhost:8000/ws/${user}/variable-refrigerant-flow-system`
+      `${protocol}//gauravjagtap.me/ws/${user}/variable-refrigerant-flow-system`
     );
 
     websocket.onopen = () => {

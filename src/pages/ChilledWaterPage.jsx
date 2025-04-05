@@ -40,6 +40,7 @@ import {
 } from "../store/store";
 import WeatherIntegration from "../components/WeatherIntegration";
 import { supabase } from "../components/SupabaseClient"; // Add this import
+import ChilledWaterSystemModel from "../components/ChilledWaterSystemModel";
 
 const SYSTEM_TYPE = "chilledWaterSystem";
 
@@ -165,7 +166,7 @@ const SimulationPage = () => {
     const activeUserId = sessionStorage.getItem("activeUserId");
     const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
     const websocket = new WebSocket(
-      `${protocol}//gauravjagtap.me/ws/${user}/variable-refrigerant-flow-system`
+      `${protocol}//gauravjagtap.me/ws/${user.id}/chilled-water-system`
     );
 
     websocket.onopen = () => {
@@ -1296,6 +1297,30 @@ const SimulationPage = () => {
             </Grid>
           </Paper>
         </Grid>
+
+        {isSimulationRunning && !isSimulationPaused && (
+          <Grid item xs={12}>
+            <Paper
+              sx={{
+                p: 4,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                background: alpha(theme.palette.background.paper, 0.8),
+                backdropFilter: "blur(10px)",
+                borderRadius: 2,
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+              }}
+            >
+              <ChilledWaterSystemModel
+                roomParameters={roomParameters}
+                hvacParameters={hvacParameters}
+                systemStatus={systemStatus}
+                isSimulationRunning={isSimulationRunning}
+              />
+            </Paper>
+          </Grid>
+        )}
 
         <Grid item xs={12}>
           <Paper

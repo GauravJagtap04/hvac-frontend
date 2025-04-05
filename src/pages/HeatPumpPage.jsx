@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
-
-import { supabase } from "../components/SupabaseClient";
 import { useDispatch, useSelector } from "react-redux";
+import { supabase } from "../components/SupabaseClient";
+import { useNavigate } from "react-router-dom";
+
+import HeatPumpSystemModel from "../components/HeatPumpSystemModel";
+
 import {
   Box,
   Grid,
@@ -54,8 +57,6 @@ const SimulationPage = () => {
     (state) => state.hvac.systems[SYSTEM_TYPE]
   );
   // Add these state variables with your other useState declarations
-  const [sessionError, setSessionError] = useState(null);
-  const [currentSession, setCurrentSession] = useState(null);
   const [temperatureData, setTemperatureData] = useState([]);
   const [ws, setWs] = useState(null);
   const [estimatedTime, setEstimatedTime] = useState(0);
@@ -68,6 +69,9 @@ const SimulationPage = () => {
   const [invalidParameterOpen, setInvalidParameterOpen] = useState(false);
   const [fanSpeedWarning, setFanSpeedWarning] = useState(false);
   const [invalidParameterMessage, setInvalidParameterMessage] = useState("");
+  const [currentSession, setCurrentSession] = useState(null);
+  const [sessionError, setSessionError] = useState(null);
+  const [authError, setAuthError] = useState(null);
   const [errorStartingSimulation, setErrorStartingSimulation] = useState(false);
   const [invalidFields, setInvalidFields] = useState({
     length: false,
@@ -76,7 +80,12 @@ const SimulationPage = () => {
   });
 
   useEffect(() => {
-    if (ws && isConnected && !isSimulationRunning) {
+    if (
+      ws &&
+      isConnected &&
+      !isSimulationRunning &&
+      ws.readyState === WebSocket.OPEN
+    ) {
       ws.send(
         JSON.stringify({
           type: "room_parameters",
@@ -180,7 +189,7 @@ const SimulationPage = () => {
     const activeUserId = sessionStorage.getItem("activeUserId");
     const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
     const websocket = new WebSocket(
-      `${protocol}//gauravjagtap.me/ws/${user}/variable-refrigerant-flow-system`
+      `${protocol}//gauravjagtap.me/ws/${user.id}/heat-pump-system`
     );
 
     websocket.onopen = () => {
@@ -300,11 +309,11 @@ const SimulationPage = () => {
   // Add this function near your other utility functions
   const saveSimulationData = async (sessionId, isSuccess) => {
     try {
-      const user = JSON.parse(localStorage.getItem("user"));
+      const activeUserId = sessionStorage.getItem("activeUserId");
+      const user = JSON.parse(localStorage.getItem(`user_${activeUserId}`));
       if (!user) {
         throw new Error("User not authenticated");
       }
-
       const simulationData = {
         session_id: sessionId,
         type: "heat-pump-system",
@@ -340,7 +349,7 @@ const SimulationPage = () => {
             timeSinceDefrost: systemStatus.timeSinceDefrost,
           },
         },
-        userid: user.id,
+        userid: activeUserId,
         is_success: isSuccess,
       };
 
@@ -359,7 +368,9 @@ const SimulationPage = () => {
   };
   const createSession = async () => {
     try {
-      const user = JSON.parse(localStorage.getItem("user"));
+      const activeUserId = sessionStorage.getItem("activeUserId");
+      const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
+
       if (!user) {
         throw new Error("User not authenticated");
       }
@@ -1289,6 +1300,30 @@ const SimulationPage = () => {
             </Grid>
           </Paper>
         </Grid>
+
+        {isSimulationRunning && !isSimulationPaused && (
+          <Grid item xs={12}>
+            <Paper
+              sx={{
+                p: 4,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                background: alpha(theme.palette.background.paper, 0.8),
+                backdropFilter: "blur(10px)",
+                borderRadius: 2,
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+              }}
+            >
+              <HeatPumpSystemModel
+                roomParameters={roomParameters}
+                hvacParameters={hvacParameters}
+                systemStatus={systemStatus}
+                isSimulationRunning={isSimulationRunning}
+              />
+            </Paper>
+          </Grid>
+        )}
 
         <Grid item xs={12}>
           <Paper

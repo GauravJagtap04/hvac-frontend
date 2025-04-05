@@ -1,280 +1,319 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
+import { supabase } from "../components/SupabaseClient";
 import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, Legend, PieChart, Pie, Cell
 } from "recharts";
-
-const energyData = [
-  { time: "00:00", value: 240 },
-  { time: "04:00", value: 180 },
-  { time: "08:00", value: 320 },
-  { time: "12:00", value: 450 },
-  { time: "16:00", value: 380 },
-  { time: "20:00", value: 290 },
-  { time: "23:59", value: 250 },
-];
-
-const temperatureData = [
-  { name: "Zone A", value: 23 },
-  { name: "Zone B", value: 22 },
-  { name: "Zone C", value: 24 },
-  { name: "Zone D", value: 21 },
-];
-
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042"];
+import { Box, Typography, Card, Grid, Chip, CircularProgress, alpha, useTheme } from "@mui/material";
+import { BoltOutlined, PowerOutlined, ThermostatAuto, Speed } from '@mui/icons-material';
 
 const AnalyticsPage = () => {
   const { isCollapsed } = useOutletContext();
-
-  const mockData = {
-    energyConsumption: 2847.23,
-    efficiency: 87.5,
-    costSavings: 12350,
-    carbonReduction: 45.8,
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div
-          className={`transition-all duration-300 ${
-            isCollapsed ? "max-w-8xl" : "max-w-7xl"
-          } mx-auto px-4 sm:px-6 lg:px-8 py-4`}
-        >
-          <h1 className="text-2xl font-semibold text-gray-900">
-            System Analytics
-          </h1>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main
-        className={`transition-all duration-300 ${
-          isCollapsed ? "max-w-8xl" : "max-w-7xl"
-        } mx-auto px-4 sm:px-6 lg:px-8 py-8`}
-      >
-        {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <MetricCard
-            title="Energy Consumption"
-            value={`${mockData.energyConsumption} kWh`}
-            trend="+2.4%"
-            trendDirection="up"
-          />
-          <MetricCard
-            title="System Efficiency"
-            value={`${mockData.efficiency}%`}
-            trend="+5.1%"
-            trendDirection="up"
-          />
-          <MetricCard
-            title="Cost Savings"
-            value={`$${mockData.costSavings}`}
-            trend="+12.3%"
-            trendDirection="up"
-          />
-          <MetricCard
-            title="Carbon Reduction"
-            value={`${mockData.carbonReduction} tons`}
-            trend="-8.4%"
-            trendDirection="down"
-          />
-        </div>
-
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <ChartCard title="Energy Usage Over Time" />
-          <ChartCard title="Temperature Distribution" />
-        </div>
-
-        {/* Performance Analysis */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">
-                System Performance Analysis
-              </h2>
-              <div className="space-y-4">
-                <PerformanceRow
-                  title="HVAC Load"
-                  value="78%"
-                  status="optimal"
-                />
-                <PerformanceRow
-                  title="Air Quality"
-                  value="95%"
-                  status="excellent"
-                />
-                <PerformanceRow
-                  title="Maintenance Status"
-                  value="Good"
-                  status="good"
-                />
-                <PerformanceRow
-                  title="Energy Efficiency"
-                  value="82%"
-                  status="warning"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">
-              Recent Alerts
-            </h2>
-            <div className="space-y-4">
-              <Alert
-                message="High energy consumption detected"
-                type="warning"
-                time="2 hours ago"
-              />
-              <Alert
-                message="Maintenance check required"
-                type="info"
-                time="5 hours ago"
-              />
-              <Alert
-                message="Temperature threshold exceeded"
-                type="error"
-                time="1 day ago"
-              />
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
-  );
-};
-
-const MetricCard = ({ title, value, trend, trendDirection }) => (
-  <div className="bg-white rounded-lg shadow-sm p-6">
-    <h3 className="text-sm font-medium text-gray-500">{title}</h3>
-    <div className="mt-2 flex items-baseline">
-      <p className="text-2xl font-semibold text-gray-900">{value}</p>
-      <span
-        className={`ml-2 text-sm font-medium ${
-          trendDirection === "up" ? "text-green-600" : "text-red-600"
-        }`}
-      >
-        {trend}
-      </span>
-    </div>
-  </div>
-);
-
-const ChartCard = ({ title }) => (
-  <div className="bg-white rounded-lg shadow-sm p-6">
-    <h2 className="text-lg font-medium text-gray-900 mb-4">{title}</h2>
-    <div className="h-64">
-      {title === "Energy Usage Over Time" ? (
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={energyData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="time" />
-            <YAxis />
-            <Tooltip />
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke="#8884d8"
-              fill="#8884d8"
-              fillOpacity={0.3}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      ) : (
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={temperatureData}
-              cx="50%"
-              cy="50%"
-              outerRadius={80}
-              fill="#8884d8"
-              dataKey="value"
-              label={({ name, value }) => `${name}: ${value}°C`}
-            >
-              {temperatureData.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={COLORS[index % COLORS.length]}
-                />
-              ))}
-            </Pie>
-            <Tooltip />
-          </PieChart>
-        </ResponsiveContainer>
-      )}
-    </div>
-  </div>
-);
-
-const PerformanceRow = ({ title, value, status }) => {
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "excellent":
-        return "text-green-600 bg-green-50";
-      case "optimal":
-        return "text-blue-600 bg-blue-50";
-      case "good":
-        return "text-green-600 bg-green-50";
-      case "warning":
-        return "text-yellow-600 bg-yellow-50";
-      default:
-        return "text-gray-600 bg-gray-50";
+  const theme = useTheme();
+  const [loading, setLoading] = useState(true);
+  const [analytics, setAnalytics] = useState({
+    energyData: [],
+    systemTypeData: [],
+    stats: {
+      totalEnergy: 0,
+      averagePower: 0,
+      successRate: 0,
+      averageCOP: 0
     }
-  };
+  });
 
-  return (
-    <div className="flex items-center justify-between py-2">
-      <span className="text-gray-600">{title}</span>
-      <div className="flex items-center space-x-4">
-        <span className="font-medium text-gray-900">{value}</span>
-        <span
-          className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-            status
-          )}`}
-        >
-          {status.toUpperCase()}
-        </span>
-      </div>
-    </div>
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        const activeUserId = sessionStorage.getItem("activeUserId");
+        const { data, error } = await supabase
+          .from("simulations")
+          .select("*")
+          .eq("userid", activeUserId);
+
+        if (error) throw error;
+
+        // Process data for analytics
+        const energyData = data.map(sim => ({
+          date: new Date(sim.created_at).toLocaleDateString(),
+          energy: sim.parameters.results.energyConsumption / 1000,
+          power: sim.parameters.hvac.power,
+          type: sim.type
+        }));
+
+        // Calculate system type distribution
+        const typeCount = data.reduce((acc, sim) => {
+          acc[sim.type] = (acc[sim.type] || 0) + 1;
+          return acc;
+        }, {});
+
+        const systemTypeData = Object.entries(typeCount).map(([name, value]) => ({
+          name: name.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+          value
+        }));
+
+        // Updated stats calculation to handle NaN
+        const stats = {
+          totalEnergy: energyData.reduce((sum, item) => sum + item.energy, 0).toFixed(2),
+          averagePower: (energyData.reduce((sum, item) => sum + item.power, 0) / (energyData.length || 1)).toFixed(2),
+          successRate: ((data.filter(sim => sim.is_success).length / (data.length || 1)) * 100).toFixed(1),
+          averageCOP: (data.reduce((sum, sim) => {
+            const cop = sim.parameters.results.cop || 0;
+            return sum + cop;
+          }, 0) / (data.length || 1)).toFixed(2) || '0.00'
+        };
+
+        setAnalytics({ energyData, systemTypeData, stats });
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching analytics:", error);
+        setLoading(false);
+      }
+    };
+
+    fetchAnalytics();
+  }, []);
+
+  const COLORS = [theme.palette.primary.main, theme.palette.secondary.main, 
+                  theme.palette.success.main, theme.palette.warning.main];
+
+  const MetricCard = ({ title, value, icon, color }) => (
+    <Card 
+      sx={{
+        p: 3,
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        background: `linear-gradient(135deg, ${alpha(color, 0.1)} 0%, ${alpha(color, 0.15)} 100%)`,
+        backdropFilter: 'blur(10px)',
+        border: `1px solid ${alpha(color, 0.2)}`,
+        transition: 'transform 0.3s, box-shadow 0.3s',
+        '&:hover': {
+          transform: 'translateY(-4px)',
+          boxShadow: `0 8px 24px -4px ${alpha(color, 0.2)}`
+        }
+      }}
+    >
+      {icon}
+      <Box sx={{ ml: 2 }}>
+        <Typography variant="subtitle2" color="text.secondary">
+          {title}
+        </Typography>
+        <Typography variant="h4" sx={{ color }}>
+          {value}
+        </Typography>
+      </Box>
+    </Card>
   );
-};
 
-const Alert = ({ message, type, time }) => {
-  const getAlertColor = (type) => {
-    switch (type) {
-      case "error":
-        return "text-red-600 bg-red-50";
-      case "warning":
-        return "text-yellow-600 bg-yellow-50";
-      case "info":
-        return "text-blue-600 bg-blue-50";
-      default:
-        return "text-gray-600 bg-gray-50";
-    }
-  };
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
-    <div className={`p-4 rounded-lg ${getAlertColor(type)}`}>
-      <div className="flex justify-between items-center">
-        <span className="font-medium">{message}</span>
-        <span className="text-sm text-gray-500">{time}</span>
-      </div>
-    </div>
+    <Box sx={{ 
+      minHeight: '100vh', 
+      p: 3, 
+      bgcolor: 'background.default',
+      background: `linear-gradient(135deg, ${theme.palette.background.default} 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`
+    }}>
+      <Grid container spacing={3}>
+        <Grid item xs={12}>
+          <Typography variant="h4" gutterBottom>
+            System Analytics Dashboard
+          </Typography>
+        </Grid>
+
+        {/* Metric Cards */}
+        <Grid item xs={12} md={3}>
+          <MetricCard
+            title="Total Energy Consumption"
+            value={`${analytics.stats.totalEnergy} kWh`}
+            icon={<BoltOutlined sx={{ fontSize: 40, color: theme.palette.primary.main }} />}
+            color={theme.palette.primary.main}
+          />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <MetricCard
+            title="Average Power"
+            value={`${analytics.stats.averagePower} kW`}
+            icon={<PowerOutlined sx={{ fontSize: 40, color: theme.palette.secondary.main }} />}
+            color={theme.palette.secondary.main}
+          />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <MetricCard
+            title="Success Rate"
+            value={`${analytics.stats.successRate}%`}
+            icon={<ThermostatAuto sx={{ fontSize: 40, color: theme.palette.success.main }} />}
+            color={theme.palette.success.main}
+          />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <MetricCard
+            title="Average COP"
+            value={analytics.stats.averageCOP}
+            icon={<Speed sx={{ fontSize: 40, color: theme.palette.warning.main }} />}
+            color={theme.palette.warning.main}
+          />
+        </Grid>
+
+        {/* Updated Chart Cards */}
+        <Grid item xs={12} md={8}>
+          <Card sx={{ 
+            p: 4,
+            height: '450px',
+            background: alpha(theme.palette.background.paper, 0.8),
+            backdropFilter: 'blur(10px)',
+            borderRadius: 2,
+            border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+            transition: 'transform 0.3s',
+            '&:hover': {
+              transform: 'translateY(-4px)',
+              boxShadow: `0 8px 24px -4px ${alpha(theme.palette.primary.main, 0.2)}`
+            }
+          }}>
+            <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main, fontWeight: 'bold' }}>
+              Energy Consumption Trend
+            </Typography>
+            <ResponsiveContainer>
+              <LineChart data={analytics.energyData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" />
+                <YAxis yAxisId="left" label={{ value: 'Energy (kWh)', angle: -90, position: 'insideLeft' }} />
+                <YAxis yAxisId="right" orientation="right" label={{ value: 'Power (kW)', angle: 90, position: 'insideRight' }} />
+                <Tooltip />
+                <Legend />
+                <Line yAxisId="left" type="monotone" dataKey="energy" stroke={theme.palette.primary.main} name="Energy" />
+                <Line yAxisId="right" type="monotone" dataKey="power" stroke={theme.palette.secondary.main} name="Power" />
+              </LineChart>
+            </ResponsiveContainer>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} md={4}>
+          <Card sx={{ 
+            p: 4,
+            height: '450px',
+            background: alpha(theme.palette.background.paper, 0.8),
+            backdropFilter: 'blur(10px)',
+            borderRadius: 2,
+            border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+            transition: 'transform 0.3s',
+            '&:hover': {
+              transform: 'translateY(-4px)',
+              boxShadow: `0 8px 24px -4px ${alpha(theme.palette.primary.main, 0.2)}`
+            }
+          }}>
+            <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main, fontWeight: 'bold' }}>
+              System Type Distribution
+            </Typography>
+            <ResponsiveContainer>
+              <PieChart>
+                <Pie
+                  data={analytics.systemTypeData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                  label
+                >
+                  {analytics.systemTypeData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </Card>
+        </Grid>
+
+        {/* Added Analytics Table */}
+        <Grid item xs={12}>
+          <Card sx={{ 
+            p: 4,
+            background: alpha(theme.palette.background.paper, 0.8),
+            backdropFilter: 'blur(10px)',
+            borderRadius: 2,
+            border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+          }}>
+            <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main, fontWeight: 'bold' }}>
+              Detailed Analytics
+            </Typography>
+            <Box sx={{ overflowX: 'auto' }}>
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      System Type
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Energy (kW)
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Power (kW)
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      COP
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Efficiency
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {analytics.energyData.map((data, index) => (
+                    <tr key={index} className="hover:bg-gray-50">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {data.type.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <span className="font-mono text-blue-600">
+                          {data.energy.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <span className="font-mono text-green-600">
+                          {data.power.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <span className="font-mono text-purple-600">
+                          {(data.energy / data.power || 0).toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <span className="font-mono text-indigo-600">
+                          {((data.energy / (data.power * 100)) || 0).toFixed(2)}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          data.energy < data.power ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"
+                        }`}>
+                          {data.energy < data.power ? "Inefficient" : "Efficient"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Box>
+          </Card>
+        </Grid>
+      </Grid>
+    </Box>
   );
 };
 

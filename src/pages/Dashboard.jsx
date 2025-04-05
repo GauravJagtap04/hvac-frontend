@@ -1,349 +1,403 @@
 import React, { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { supabase } from "../components/SupabaseClient";
+import { format } from 'date-fns';
+import axios from 'axios';
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
   Tooltip,
   Legend,
-} from "chart.js";
-import { Line } from "react-chartjs-2";
-import { ChevronDownIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
-
-// Register ChartJS components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend
-);
-
-// Chart options
-const chartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: "top",
-    },
-  },
-  scales: {
-    y: {
-      beginAtZero: true,
-      grid: {
-        color: "rgba(0, 0, 0, 0.1)",
-      },
-    },
-    x: {
-      grid: {
-        display: false,
-      },
-    },
-  },
-};
+  ResponsiveContainer
+} from 'recharts';
+import { FormControl, InputLabel, Select, MenuItem, Typography } from '@mui/material';
 
 const Dashboard = () => {
   const { isCollapsed } = useOutletContext();
-  const [stats, setStats] = useState({
-    totalSimulations: 0,
-    successRate: 0,
-    activeUsers: 0,
-    recentSimulations: [],
-    previousTotal: 0,
-    previousRate: 0,
-    previousActive: 0,
-  });
-
-  const [simulationData, setSimulationData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [simulations, setSimulations] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
+  const [weatherData, setWeatherData] = useState(null);
+  const [energyStats, setEnergyStats] = useState({
+    highestEnergy: 0,
+    highestPower: 0,
+  });
+  const [processedData, setProcessedData] = useState([]);
+  const [selectedType, setSelectedType] = useState('all'); // Add this state
+
+  const processSimulationData = (simulationsData) => {
+    const energyData = simulationsData.map(sim => ({
+      date: new Date(sim.created_at).toLocaleDateString(),
+      energy: sim.parameters.results.energyConsumption / 1000, // Convert to kW
+      power: sim.parameters.hvac.power,
+      type: sim.type
+    }));
+
+    const highestEnergy = Math.max(...energyData.map(d => d.energy));
+    const highestPower = Math.max(...energyData.map(d => d.power));
+
+    setEnergyStats({
+      highestEnergy: highestEnergy.toFixed(2),
+      highestPower: highestPower.toFixed(2),
+    });
+
+    setProcessedData(energyData);
+  };
+  const getCurrentLocation = () => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation is not supported by your browser'));
+      } else {
+        navigator.geolocation.getCurrentPosition(
+          (position) => resolve(position),
+          (err) => reject(err)
+        );
+      }
+    });
+  };
+  const fetchWeather = async () => {
+    try {
+      const position = await getCurrentLocation();
+      const { latitude, longitude } = position.coords;
+      
+      const response = await axios.get(
+        `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=64f7ed0f4795b8e14478efa48a22c367&units=metric`
+      );
+      setWeatherData(response.data);
+    } catch (error) {
+      console.error('Error fetching weather:', error);
+      // Fallback to a default location if geolocation fails
+      try {
+        const response = await axios.get(
+          `https://api.openweathermap.org/data/2.5/weather?q=Mumbai&appid=64f7ed0f4795b8e14478efa48a22c367&units=metric`
+        );
+        setWeatherData(response.data);
+      } catch (fallbackError) {
+        console.error('Error fetching fallback weather:', fallbackError);
+      }
+    }
+  };
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       setLoading(true);
       const userId = localStorage.getItem("user");
-      console.log("Current userId:", userId);
-
-      if (!userId) {
-        console.error("No userId found in localStorage");
-        setLoading(false);
-        return;
-      }
-
+      
       try {
-        // First verify if we can connect to Supabase
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         
-        if (authError) {
-          console.error("Auth error:", authError);
-          setLoading(false);
-          return;
-        }
+        if (authError) throw authError;
 
-        console.log("Fetching simulations for user:", userId);
-        
-        const { data: simulations, error } = await supabase
+        const { data, error } = await supabase
           .from("simulations")
-          .select(`
-            id,
-            type,
-            parameters,
-            created_at,
-            is_success,
-            session_id
-          `)
+          .select('*')
           .eq("userid", user.id)
-          .order("created_at", { ascending: false });
+          .order('created_at', { ascending: false });
 
-        console.log("Raw response:", { simulations, error });
-
-        if (error) {
-          console.error("Database error:", error);
-          throw error;
+        if (error) throw error;
+        if (data) {
+          setSimulations(data);
+          processSimulationData(data);
         }
-
-        if (!simulations) {
-          console.log("No simulations found");
-          setStats({
-            totalSimulations: 0,
-            successRate: 0,
-            activeUsers: 0,
-            recentSimulations: [],
-            previousTotal: 0,
-            previousRate: 0,
-            previousActive: 0,
-          });
-          setLoading(false);
-          return;
-        }
-
-        console.log("Fetched simulations:", simulations);
-
-        const successCount = simulations.filter((sim) => sim.is_success).length;
-        const successRate = (successCount / simulations.length) * 100 || 0;
-
-        setSimulationData(simulations);
-        setStats({
-          totalSimulations: simulations.length,
-          successRate: Math.round(successRate),
-          activeUsers: 1,
-          recentSimulations: simulations,
-          previousTotal: 0,
-          previousRate: 0,
-          previousActive: 0,
-        });
       } catch (error) {
-        console.error("Error in fetchDashboardData:", error);
+        console.error("Error fetching simulations:", error);
       } finally {
         setLoading(false);
       }
     };
 
     fetchDashboardData();
+    fetchWeather();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-gray-600">Loading dashboard data...</div>
+  const filteredSimulations = simulations.filter(sim => 
+    selectedType === 'all' ? true : sim.type === selectedType
+  );
+
+  const sortedSimulations = [...filteredSimulations].sort((a, b) => {
+    if (sortConfig.key === 'created_at') {
+      return sortConfig.direction === 'asc' 
+        ? new Date(a.created_at) - new Date(b.created_at)
+        : new Date(b.created_at) - new Date(a.created_at);
+    }
+    return 0;
+  });
+
+  useEffect(() => {
+    if (sortedSimulations.length > 0) {
+      processSimulationData(sortedSimulations);
+    }
+  }, [searchTerm, sortConfig.direction]);
+
+  const handleSort = () => {
+    setSortConfig({
+      key: 'created_at',
+      direction: sortConfig.direction === 'asc' ? 'desc' : 'asc'
+    });
+  };
+
+  const StatCards = () => (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="bg-white rounded-xl shadow-lg p-6 transform transition-all duration-300 hover:scale-105">
+        <div className="flex items-center space-x-4">
+          <div className="p-3 bg-blue-100 rounded-lg">
+            <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div>
+            <div className="text-sm font-medium text-gray-500">Highest Energy Consumption</div>
+            <div className="text-2xl font-bold text-blue-600">{energyStats.highestEnergy} kW</div>
+          </div>
+        </div>
       </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow-sm">
-        <div
-          className={`transition-all duration-300 ${
-            isCollapsed ? "max-w-8xl" : "max-w-7xl"
-          } mx-auto px-4 sm:px-6 lg:px-8 py-4`}
-        >
-          <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+      <div className="bg-white rounded-xl shadow-lg p-6 transform transition-all duration-300 hover:scale-105">
+        <div className="flex items-center space-x-4">
+          <div className="p-3 bg-green-100 rounded-lg">
+            <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707" />
+            </svg>
+          </div>
+          <div>
+            <div className="text-sm font-medium text-gray-500">Highest Power Usage</div>
+            <div className="text-2xl font-bold text-green-600">{energyStats.highestPower} kW</div>
+          </div>
         </div>
-      </header>
-
-      <main
-        className={`transition-all duration-300 ${
-          isCollapsed ? "max-w-8xl" : "max-w-7xl"
-        } mx-auto px-4 sm:px-6 lg:px-8 py-8`}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <MetricCard
-            title="Total Simulations"
-            value={stats.totalSimulations}
-            change={`+${stats.totalSimulations - stats.previousTotal}`}
-            trend="up"
-            icon="🔄"
-          />
-          <MetricCard
-            title="Success Rate"
-            value={`${stats.successRate}%`}
-            change={`${
-              stats.successRate > stats.previousRate ? "+" : "-"
-            }${Math.abs(stats.successRate - stats.previousRate)}%`}
-            trend={stats.successRate > stats.previousRate ? "up" : "down"}
-            icon="📊"
-          />
-          <MetricCard
-            title="Active Sessions"
-            value={stats.activeUsers}
-            change={`+${stats.activeUsers - stats.previousActive}`}
-            trend="up"
-            icon="👥"
-          />
-          <MetricCard
-            title="Simulation Types"
-            value="2"
-            change="Basic/Advanced"
-            trend="info"
-            icon="🔧"
-          />
-        </div>
-
-        <div className="grid grid-cols-12 gap-6">
-          <div className="col-span-12">
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">
-                Recent Simulations
-              </h2>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead>
-                    <tr>
-                      <th className="w-1/6 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Type
-                      </th>
-                      <th className="w-1/6 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="w-1/4 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Created At
-                      </th>
-                      <th className="w-1/4 px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Parameters
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {stats.recentSimulations.map((sim) => (
-                      <tr key={sim.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {sim.type}
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm">
-                          <span
-                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              sim.is_success
-                                ? "bg-green-100 text-green-800"
-                                : "bg-red-100 text-red-800"
-                            }`}
-                          >
-                            {sim.is_success ? "Success" : "Failed"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(sim.created_at).toLocaleString()}
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-center">
-                          <ParametersView parameters={sim.parameters} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+      </div>
+      <div className="bg-white rounded-xl shadow-lg p-6 transform transition-all duration-300 hover:scale-105">
+        <div className="flex items-center space-x-4">
+          <div className="p-3 bg-orange-100 rounded-lg">
+            <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707" />
+            </svg>
+          </div>
+          <div>
+            <div className="text-sm font-medium text-gray-500">Current External Temperature</div>
+            <div className="text-2xl font-bold text-orange-600">
+              {weatherData ? `${weatherData.main.temp}°C` : 'Loading...'}
             </div>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
-};
 
-const MetricCard = ({ title, value, change, trend, icon }) => (
-  <div className="bg-white rounded-lg shadow-sm p-6">
-    <div className="flex items-center justify-between">
-      <span className="text-2xl">{icon}</span>
-      <span
-        className={`text-sm font-medium ${
-          trend === "up" ? "text-green-600" : "text-red-600"
-        }`}
-      >
-        {change}
-      </span>
-    </div>
-    <h3 className="text-xl font-semibold text-gray-900 mt-4">{value}</h3>
-    <p className="text-sm text-gray-500 mt-1">{title}</p>
-  </div>
-);
-
-const ParametersView = ({ parameters }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  const renderValue = (value) => {
-    if (typeof value === 'object' && value !== null) {
-      return Object.entries(value).map(([subKey, subValue]) => (
-        <div key={subKey} className="flex flex-col space-y-1">
-          <div className="flex flex-col p-2 bg-gray-50 rounded">
-            <span className="text-sm font-medium text-gray-600 mb-1">{subKey}</span>
-            <span className={`text-sm font-mono px-2 py-1 rounded break-all ${
-              typeof subValue === 'number' 
-                ? 'bg-blue-100 text-blue-700' 
-                : typeof subValue === 'boolean'
-                ? subValue 
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-red-100 text-red-700'
-                : 'bg-purple-100 text-purple-700'
-            }`}>
-              {typeof subValue === 'object' ? JSON.stringify(subValue) : subValue.toString()}
-            </span>
-          </div>
+  const EnergyGraph = ({ simulations }) => {
+    const data = processSimulationData(simulations);
+    
+    return (
+      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <h2 className="text-lg font-medium text-gray-900 mb-4">Energy & Power Consumption</h2>
+        <div className="h-96">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis yAxisId="left" />
+              <YAxis yAxisId="right" orientation="right" />
+              <Tooltip />
+              <Legend />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="energy"
+                stroke="#2563eb"
+                name="Energy (kW)"
+                dot={false}
+              />
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="power"
+                stroke="#16a34a"
+                name="Power (kW)"
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
-      ));
-    }
-    return <span className="text-gray-600 break-all">{JSON.stringify(value)}</span>;
+      </div>
+    );
   };
 
   return (
-    <div className="relative flex justify-center">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="inline-flex items-center px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors duration-200"
-      >
-        {isExpanded ? (
-          <ChevronDownIcon className="h-4 w-4 mr-2 text-gray-600" />
-        ) : (
-          <ChevronRightIcon className="h-4 w-4 mr-2 text-gray-600" />
-        )}
-        <span className="text-sm font-medium text-gray-700">View</span>
-      </button>
-      
-      {isExpanded && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 z-40 flex items-center justify-center">
-          <div className="bg-white rounded-lg shadow-xl w-[500px] max-h-[600px] z-50">
-            <div className="flex justify-between items-center p-4 border-b border-gray-100">
-              <div className="text-lg font-semibold text-gray-700">Parameters</div>
-              <button 
-                onClick={() => setIsExpanded(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="p-4 overflow-y-auto max-h-[500px]">
-              <div className="space-y-3">
-                {renderValue(parameters)}
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <header className="bg-white shadow-md">
+        <div className={`transition-all duration-300 ${
+          isCollapsed ? "max-w-8xl" : "max-w-7xl"
+        } mx-auto px-6 py-6`}>
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+        </div>
+      </header>
+
+      <main className={`transition-all duration-300 ${
+        isCollapsed ? "max-w-8xl" : "max-w-7xl"
+      } mx-auto px-6 py-8`}>
+        <div className="mb-8">
+          <StatCards />
+        </div>
+
+        <div className="mb-8">
+          <div className="bg-white rounded-xl shadow-lg p-6 transition-all duration-300 hover:shadow-xl">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Energy & Power Consumption</h2>
+            <div className="h-[400px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={processedData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis yAxisId="left" label={{ value: 'Energy (kW)', angle: -90, position: 'insideLeft' }} />
+                  <YAxis yAxisId="right" orientation="right" label={{ value: 'Power (kW)', angle: 90, position: 'insideRight' }} />
+                  <Tooltip />
+                  <Legend />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="energy"
+                    stroke="#2563eb"
+                    name="Energy (kW)"
+                    dot={false}
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="power"
+                    stroke="#16a34a"
+                    name="Power (kW)"
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </div>
         </div>
-      )}
+
+        <div className="bg-white rounded-xl shadow-lg p-6 transition-all duration-300 hover:shadow-xl">
+          <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <FormControl sx={{ minWidth: 240 }}>
+              <InputLabel>Filter by System Type</InputLabel>
+              <Select
+                value={selectedType}
+                onChange={(e) => setSelectedType(e.target.value)}
+                className="bg-white"
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    '&:hover fieldset': {
+                      borderColor: '#3b82f6',
+                    },
+                  },
+                }}
+              >
+                <MenuItem value="all">All Systems</MenuItem>
+                <MenuItem value="split-system">Split System</MenuItem>
+                <MenuItem value="heat-pump-system">Heat Pump System</MenuItem>
+                <MenuItem value="chilled-water-system">Chilled Water System</MenuItem>
+                <MenuItem value="variable-refrigerant-flow-system">VRF System</MenuItem>
+              </Select>
+            </FormControl>
+            <Typography variant="body2" className="text-gray-600 font-medium">
+              {filteredSimulations.length} simulation{filteredSimulations.length !== 1 ? 's' : ''} found
+            </Typography>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead>
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Type
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Power (kW)
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Fan Speed (%)
+                  </th>
+
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Air Flow Rate (m³/s)
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Current Temp (°C)
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    External Temp (°C)
+                  </th>
+
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Wall Insulation
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Final Temp (°C)
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Energy (kW)
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                      onClick={handleSort}>
+                    Date {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {sortedSimulations.map((sim) => (
+                  <tr key={sim.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {sim.type}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <span className="font-mono text-blue-600">{sim.parameters.hvac.power}</span>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <span className="font-mono text-yellow-600">{sim.parameters.hvac.fanSpeed}</span>
+                    </td>
+
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <span className="font-mono text-indigo-600">{sim.parameters.hvac.airFlowRate}</span>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <span className="font-mono text-blue-600">{sim.parameters.room.currentTemp}</span>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <span className="font-mono text-blue-600">{sim.parameters.room.externalTemp}</span>
+                    </td>
+
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <span className="capitalize">{sim.parameters.room.wallInsulation}</span>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <span className="font-mono text-green-600">
+                        {sim.parameters.results.finalTemperature.toFixed(2)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <span className="font-mono text-red-600">
+                        {(sim.parameters.results.energyConsumption / 1000).toFixed(2)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {format(new Date(sim.created_at), 'MMM d, yyyy HH:mm')}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        sim.is_success ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                      }`}>
+                        {sim.is_success ? "Success" : "Failed"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
     </div>
   );
 };

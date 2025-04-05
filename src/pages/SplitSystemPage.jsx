@@ -3,6 +3,8 @@ import { useDispatch, useSelector } from "react-redux";
 import { supabase } from "../components/SupabaseClient";
 import { useNavigate } from "react-router-dom";
 
+import SplitSystemModel from "../components/Models/SplitSystemModel";
+
 import {
   Box,
   Grid,
@@ -1181,6 +1183,30 @@ const SimulationPage = () => {
             </Grid>
           </Paper>
         </Grid>
+
+        {isSimulationRunning && !isSimulationPaused && (
+          <Grid item xs={12}>
+            <Paper
+              sx={{
+                p: 4,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                background: alpha(theme.palette.background.paper, 0.8),
+                backdropFilter: "blur(10px)",
+                borderRadius: 2,
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+              }}
+            >
+              <SplitSystemModel
+                roomParameters={roomParameters}
+                hvacParameters={hvacParameters}
+                systemStatus={systemStatus}
+                isSimulationRunning={isSimulationRunning}
+              />
+            </Paper>
+          </Grid>
+        )}
 
         <Grid item xs={12}>
           <Paper

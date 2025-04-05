@@ -176,8 +176,11 @@ const SimulationPage = () => {
   ]);
 
   useEffect(() => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const activeUserId = sessionStorage.getItem("activeUserId");
+    const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
     const websocket = new WebSocket(
-      "ws://localhost:8000/ws?system_type=heat-pump-system"
+      `${protocol}//localhost:8000/ws/${user}/variable-refrigerant-flow-system`
     );
 
     websocket.onopen = () => {

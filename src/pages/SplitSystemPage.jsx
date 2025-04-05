@@ -250,7 +250,6 @@ const SimulationPage = () => {
     const websocket = new WebSocket(
       `${protocol}//gauravjagtap.me/ws/${user.id}/split-system`
     );
-    
     websocket.onopen = () => {
       setAuthError(null);
       dispatch(setConnectionStatus(true));

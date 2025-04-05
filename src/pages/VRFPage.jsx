@@ -43,7 +43,7 @@ import {
 } from "../store/store";
 import WeatherIntegration from "../components/WeatherIntegration";
 
-import VRFSystemModel from "../components/VRFSystemModel";
+import VRFSystemModel from "../components/Models/VRFSystemModel";
 
 const SYSTEM_TYPE = "vrfSystem";
 const safeObject = (obj) => obj || {};

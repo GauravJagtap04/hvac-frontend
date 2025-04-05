@@ -40,7 +40,8 @@ import {
 } from "../store/store";
 import WeatherIntegration from "../components/WeatherIntegration";
 import { supabase } from "../components/SupabaseClient"; // Add this import
-import ChilledWaterSystemModel from "../components/ChilledWaterSystemModel";
+
+import ChilledWaterSystemModel from "../components/Models/ChilledWaterSystemModel";
 
 const SYSTEM_TYPE = "chilledWaterSystem";
 

@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { supabase } from "../components/SupabaseClient";
 import { useNavigate } from "react-router-dom";
 
-import HeatPumpSystemModel from "../components/HeatPumpSystemModel";
+import HeatPumpSystemModel from "../components/Models/HeatPumpSystemModel";
 
 import {
   Box,

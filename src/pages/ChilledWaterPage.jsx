@@ -217,7 +217,7 @@ const SimulationPage = () => {
     }
 
     const websocket = new WebSocket(
-      `${protocol}//gauravjagtap.me/ws/${user.id}/chilled-water-system`
+      `${protocol}//localhost:8000/ws/${user.id}/chilled-water-system`
     );
 
     websocket.onopen = () => {

@@ -215,7 +215,7 @@ const SimulationPage = () => {
     }
 
     const websocket = new WebSocket(
-      `${protocol}//gauravjagtap.me/ws/${user.id}/heat-pump-system`
+      `${protocol}//localhost:8000/ws/${user.id}/heat-pump-system`
     );
 
     websocket.onopen = () => {

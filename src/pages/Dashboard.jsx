@@ -94,8 +94,6 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchDashboardData = async () => {
       setLoading(true);
-      const userId = localStorage.getItem("user");
-
       try {
         const {
           data: { user },

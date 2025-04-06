@@ -35,6 +35,7 @@ export default function Login() {
       const userNamespace = `user_${data.user.id}`;
 
       dispatch(setUser(data.user));
+      localStorage.setItem("user", JSON.stringify(data.user));
       sessionStorage.setItem(`${userNamespace}`, JSON.stringify(data.user));
 
       sessionStorage.setItem("activeUserId", data.user.id);

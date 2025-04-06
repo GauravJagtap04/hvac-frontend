@@ -11,16 +11,43 @@ const SettingsPage = () => {
     { id: "notifications", name: "Notifications" },
     { id: "security", name: "Security & Privacy" },
   ];
-
+  const goBack = () => {
+    navigate(-1);
+  };
   return (
     <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow-sm">
-        <div
-          className={`transition-all duration-300 ${
-            isCollapsed ? "max-w-8xl" : "max-w-7xl"
-          } mx-auto px-4 sm:px-6 lg:px-8 py-4`}
-        >
-          <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
+      <header className="bg-blue-100 dark:bg-gray-800 shadow-lg z-10">
+        <div className="px-3 py-2 sm:p-4 flex items-center justify-between">
+          <div className="flex items-center space-x-1 sm:space-x-2">
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              <button
+                onClick={goBack}
+                className="p-1 sm:p-2 group rounded-full bg-transparent hover:bg-blue-500 dark:hover:bg-gray-700 focus:outline-none transition-colors"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500 group-hover:text-white dark:text-gray-300"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
+                </svg>
+              </button>
+            </div>
+            <h1 className="text-base sm:text-xl font-semibold ml-1 sm:ml-3 text-gray-800 dark:text-white truncate">
+              Settings
+            </h1>
+          </div>
+
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            {/* Add additional header items here */}
+          </div>
         </div>
       </header>
 

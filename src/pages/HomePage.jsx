@@ -236,7 +236,7 @@ const HomePage = () => {
         </div>
       </footer>
 
-      <style jsx>{`
+      <style>{`
         @keyframes float {
           0% {
             transform: translateY(0px);

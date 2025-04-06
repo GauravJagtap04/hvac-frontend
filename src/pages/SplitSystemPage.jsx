@@ -2,9 +2,8 @@ import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { supabase } from "../components/SupabaseClient";
 import { useNavigate } from "react-router-dom";
-
 import SplitSystemModel from "../components/Models/SplitSystemModel";
-
+import WeatherIntegration from "../components/WeatherIntegration";
 import {
   Box,
   Grid,
@@ -43,7 +42,6 @@ import {
   setSimulationStatus,
   setSimulationPaused,
 } from "../store/store";
-import WeatherIntegration from "../components/WeatherIntegration";
 
 const SYSTEM_TYPE = "splitSystem";
 
@@ -133,53 +131,10 @@ const SimulationPage = () => {
     if (isSimulationRunning && !isSimulationPaused && countdownTime > 0) {
       timer = setInterval(() => {
         setCountdownTime((prev) => Math.max(0, prev - 1));
-        // Add this function to update session status
       }, 1000);
     }
     return () => clearInterval(timer);
   }, [isSimulationRunning, isSimulationPaused, countdownTime]);
-
-  const createSession = async () => {
-    try {
-      const activeUserId = sessionStorage.getItem("activeUserId");
-      const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
-
-      if (!user) {
-        throw new Error("User not authenticated");
-      }
-
-      const { data: existingSession, error: fetchError } = await supabase
-        .from("sessions")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .single();
-
-      if (!existingSession) {
-        const { data, error } = await supabase
-          .from("sessions")
-          .insert([
-            {
-              user_id: user.id,
-              is_active: true,
-            },
-          ])
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        sessionStorage.setItem(`${user.id}_session`, JSON.stringify(data));
-        return data;
-      }
-
-      return existingSession;
-    } catch (error) {
-      console.error("Error creating session:", error.message);
-      setSessionError(error.message);
-      return null;
-    }
-  };
 
   useEffect(() => {
     if (isSimulationRunning && !isSimulationPaused) {
@@ -201,6 +156,7 @@ const SimulationPage = () => {
         const currentSessionData = JSON.parse(
           sessionStorage.getItem(`${user.id}_session`)
         );
+
         if (currentSessionData) {
           saveSimulationData(currentSessionData.session_id, true)
             .then(() => {
@@ -217,6 +173,7 @@ const SimulationPage = () => {
               setSessionError(error.message);
             });
         }
+
         dispatch(setSimulationStatus(false));
         dispatch(setSimulationPaused(false));
       }
@@ -229,6 +186,7 @@ const SimulationPage = () => {
   ]);
 
   useEffect(() => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const activeUserId = sessionStorage.getItem("activeUserId");
 
     if (!activeUserId) {
@@ -248,7 +206,6 @@ const SimulationPage = () => {
     }
 
     // Determine the WebSocket protocol based on the page's protocol
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const websocket = new WebSocket(
       `${protocol}//gauravjagtap.me/ws/${user.id}/split-system`
     );
@@ -351,8 +308,80 @@ const SimulationPage = () => {
     return sanitized;
   };
 
+  const createSession = async () => {
+    try {
+      const activeUserId = sessionStorage.getItem("activeUserId");
+      console.log("Creating session for user ID:", activeUserId);
+
+      const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
+
+      if (!user) {
+        console.error("No user found in sessionStorage");
+        throw new Error("User not authenticated");
+      }
+
+      console.log("User data found:", user.id);
+
+      const { data: existingSessions, error: fetchError } = await supabase
+        .from("sessions")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true);
+
+      if (fetchError) {
+        console.error("Error checking for existing session:", fetchError);
+        throw fetchError;
+      }
+
+      if (existingSessions && existingSessions.length > 0) {
+        const existingSession = existingSessions[0];
+
+        console.log("Found existing active session:", existingSession);
+        sessionStorage.setItem(
+          `${user.id}_session`,
+          JSON.stringify(existingSession)
+        );
+        return existingSession;
+      }
+
+      console.log("Creating new session for user:", user.id);
+      const { data, error } = await supabase
+        .from("sessions")
+        .insert([
+          {
+            user_id: user.id,
+            is_active: true,
+          },
+        ])
+        .select();
+
+      if (error) {
+        console.error("Error creating session:", error);
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        const newSession = data[0];
+        console.log("New session created successfully:", newSession);
+        sessionStorage.setItem(
+          `${user.id}_session`,
+          JSON.stringify(newSession)
+        );
+        return newSession;
+      } else {
+        throw new Error("No session data returned after insert");
+      }
+    } catch (error) {
+      console.error("Error creating session:", error.message);
+      setSessionError(error.message);
+      return null;
+    }
+  };
+
   const updateSessionStatus = async (sessionId, isActive = false) => {
     try {
+      console.log(`Updating session ${sessionId} to is_active=${isActive}`);
+
       const { error } = await supabase
         .from("sessions")
         .update({
@@ -361,17 +390,27 @@ const SimulationPage = () => {
         })
         .eq("session_id", sessionId);
 
-      if (error) throw error;
+      if (error) {
+        console.log("Error updating session status:", error);
+        throw error;
+      }
+
+      console.log("Session status updated successfully");
     } catch (error) {
       console.error("Error updating session:", error.message);
+      setSessionError(error.message);
     }
   };
 
   const saveSimulationData = async (sessionId, isSuccess) => {
     try {
       const activeUserId = sessionStorage.getItem("activeUserId");
-      console.log("Active User ID:", activeUserId);
-      // const user = JSON.parse(sessionStorage.getItem(`{user_${activeUserId}`));
+      console.log("Saving simulation data for session:", sessionId);
+      console.log("User ID:", activeUserId);
+
+      if (!sessionId) {
+        throw new Error("Invalid session ID");
+      }
 
       const simulationData = {
         session_id: sessionId,
@@ -404,12 +443,20 @@ const SimulationPage = () => {
         is_success: isSuccess,
       };
 
+      console.log("Simulation data to be saved:", simulationData);
+
       const { data, error } = await supabase
         .from("simulations")
         .insert([simulationData])
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error inserting simulation data:", error);
+        throw error;
+      }
+
+      console.log("Simulation data saved successfully:", data);
+
       return data;
     } catch (error) {
       console.error("Error saving simulation data:", error.message);
@@ -521,8 +568,6 @@ const SimulationPage = () => {
     setErrorStartingSimulation(Object.values(newInvalidFields).some(Boolean));
   };
 
-  const hasInvalidFields = Object.values(invalidFields).some(Boolean);
-
   const handleHVACParameterChange = (parameter) => (event, value) => {
     const update = { [parameter]: value };
     dispatch(updateHVACParameters({ system: SYSTEM_TYPE, parameters: update }));
@@ -535,6 +580,8 @@ const SimulationPage = () => {
       setFanSpeedWarning(false);
     }
   };
+
+  const hasInvalidFields = Object.values(invalidFields).some(Boolean);
 
   const StatusCard = ({ title, value, unit, icon }) => (
     <Paper
@@ -1240,7 +1287,6 @@ const SimulationPage = () => {
                     ) : null
                   }
                   disabled={hasInvalidFields}
-                  // Replace the existing onClick handler in the simulation control button
                   onClick={async () => {
                     try {
                       const action = isSimulationRunning
@@ -1250,10 +1296,21 @@ const SimulationPage = () => {
                         : "start";
 
                       if (action === "start") {
+                        console.log("Starting simulation, creating session...");
                         const sessionData = await createSession();
                         if (!sessionData) {
+                          console.error(
+                            "Session creation failed, cannot start simulation"
+                          );
+                          setSessionError(
+                            "Failed to create session. Please try again."
+                          );
                           return; // Don't proceed if session creation failed
                         }
+                        console.log(
+                          "Session created successfully:",
+                          sessionData
+                        );
                         setCurrentSession(sessionData);
                       }
 
@@ -1261,6 +1318,8 @@ const SimulationPage = () => {
                         type: "simulation_control",
                         data: { action },
                       };
+
+                      console.log("Sending WebSocket message:", message);
 
                       ws?.send(JSON.stringify(message));
 
@@ -1274,6 +1333,10 @@ const SimulationPage = () => {
                       }
                     } catch (error) {
                       console.error("Error controlling simulation:", error);
+                      setSessionError(
+                        error.message ||
+                          "An error occurred while controlling the simulation"
+                      );
                     }
                   }}
                   sx={{
@@ -1311,16 +1374,32 @@ const SimulationPage = () => {
 
                         const activeUserId =
                           sessionStorage.getItem("activeUserId");
+                        console.log(
+                          "Active user ID for stopping simulation:",
+                          activeUserId
+                        );
+
+                        if (!activeUserId) {
+                          throw new Error("No active user found");
+                        }
+
                         const user = JSON.parse(
                           sessionStorage.getItem(`user_${activeUserId}`)
                         );
+                        console.log("User data for stopping simulation:", user);
 
                         // Get current session from sessionStorage
-                        const currentSession = JSON.parse(
-                          sessionStorage.getItem(`${user.id}_session`)
-                        );
+                        const sessionKey = `${user.id}_session`;
+                        const sessionData = sessionStorage.getItem(sessionKey);
+                        console.log("Session data from storage:", sessionData);
 
-                        if (currentSession) {
+                        if (sessionData) {
+                          const currentSession = JSON.parse(sessionData);
+                          console.log(
+                            "Current session for stopping simulation:",
+                            currentSession
+                          );
+
                           // Calculate if simulation was successful (target temperature reached)
                           const isSuccess =
                             Math.abs(
@@ -1328,20 +1407,38 @@ const SimulationPage = () => {
                                 roomParameters.targetTemp
                             ) <= 0.5;
 
-                          // Save simulation data
-                          await saveSimulationData(
-                            currentSession.session_id,
-                            isSuccess
+                          console.log("Simulation success status:", isSuccess);
+
+                          try {
+                            // Save simulation data
+                            console.log("Saving simulation data...");
+                            await saveSimulationData(
+                              currentSession.session_id,
+                              isSuccess
+                            );
+
+                            // Update session status
+                            console.log("Updating session status...");
+                            await updateSessionStatus(
+                              currentSession.session_id,
+                              false
+                            );
+
+                            // Clear session from sessionStorage
+                            console.log("Removing session from storage...");
+                            sessionStorage.removeItem(sessionKey);
+                            setCurrentSession(null);
+                            console.log("Session cleared successfully");
+                          } catch (saveError) {
+                            console.error(
+                              "Error during simulation data saving:",
+                              saveError
+                            );
+                          }
+                        } else {
+                          console.warn(
+                            "No active session found when stopping simulation"
                           );
-
-                          // Update session status
-                          await supabase
-                            .from("sessions")
-                            .update({ is_active: false })
-                            .eq("session_id", currentSession.session_id);
-
-                          // Clear session from sessionStorage
-                          sessionStorage.removeItem(`${user.id}_session`);
                         }
 
                         ws?.send(JSON.stringify(message));

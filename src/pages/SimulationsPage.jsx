@@ -14,11 +14,13 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useDispatch, useSelector } from "react-redux";
 import { setSelectedSystem } from "../store/store";
+import { useOutletContext } from "react-router-dom";
 
 const SimulationsPage = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const dispatch = useDispatch();
+  const { isCollapsed } = useOutletContext();
 
   const [openSnackbar, setOpenSnackbar] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
@@ -89,36 +91,57 @@ const SimulationsPage = () => {
       dispatch(setSelectedSystem("chilled water system"));
     }
   };
-
+  const goBack = () => {
+    navigate(-1);
+  };
   return (
     <Box
       sx={{
         minHeight: "100vh",
         background: `linear-gradient(135deg, ${theme.palette.background.default} 0%, ${theme.palette.background.paper} 100%)`,
-        py: 6,
+        pt: "64px", // Add padding top to account for fixed header
       }}
     >
-      <Container maxWidth="xl">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <Typography
-            variant="h3"
-            sx={{
-              mb: 4,
-              fontWeight: 700,
-              background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              textAlign: "center",
-            }}
-          >
-            HVAC Simulations
-          </Typography>
-        </motion.div>
+      <header
+        className={`bg-blue-100 dark:bg-gray-800 shadow-lg fixed top-0 ${
+          isCollapsed ? "left-[80px]" : "left-[250px]"
+        } right-0 z-10 transition-all duration-300`}
+      >
+        <div className="px-3 py-2 sm:p-4 flex items-center justify-between">
+          <div className="flex items-center space-x-1 sm:space-x-2">
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              {/* <button
+                onClick={goBack}
+                className="p-1 sm:p-2 group rounded-full bg-transparent hover:bg-blue-500 dark:hover:bg-gray-700 focus:outline-none transition-colors"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500 group-hover:text-white dark:text-gray-300"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
+                </svg>
+              </button> */}
+            </div>
+            <h1 className="text-base sm:text-xl font-semibold ml-1 sm:ml-3 text-gray-800 dark:text-white truncate">
+              Simulation
+            </h1>
+          </div>
 
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            {/* Add additional header items here */}
+          </div>
+        </div>
+      </header>
+
+      <Container maxWidth="xl" sx={{ py: 6 }}>
         <Grid container spacing={4}>
           {simulations.map((simulation, index) => (
             <Grid item xs={12} sm={6} md={4} lg={3} key={simulation.id}>

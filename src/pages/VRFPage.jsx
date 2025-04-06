@@ -218,7 +218,7 @@ const SimulationPage = () => {
     }
 
     const websocket = new WebSocket(
-      `${protocol}//localhost:8000/ws/${user.id}/variable-refrigerant-flow-system`
+      `${protocol}//gauravjagtap.me/ws/${user.id}/variable-refrigerant-flow-system`
     );
 
     websocket.onopen = () => {

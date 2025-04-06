@@ -83,7 +83,9 @@ const TrainingPage = () => {
       setQuizCompleted(true);
     }
   };
-
+  const goBack = () => {
+    navigate(-1);
+  };
   const handleRestartQuiz = () => {
     setCurrentQuiz(quizzes[0]);
     setSelectedAnswer(null);
@@ -112,50 +114,37 @@ const TrainingPage = () => {
   }
   return (
     <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow-sm sticky top-0 z-10">
-        <div
-          className={`transition-all duration-300 ${
-            isCollapsed ? "max-w-8xl" : "max-w-7xl"
-          } mx-auto px-4 sm:px-6 lg:px-8 py-4`}
-        >
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-semibold text-gray-900">
-              HVAC Training Portal
-            </h1>
-            <div className="flex items-center space-x-4">
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setActiveTab("modules")}
-                  className={`px-4 py-2 rounded-lg ${
-                    activeTab === "modules"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
+      <header className="bg-blue-100 dark:bg-gray-800 shadow-lg z-10">
+        <div className="px-3 py-2 sm:p-4 flex items-center justify-between">
+          <div className="flex items-center space-x-1 sm:space-x-2">
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              {/* <button
+                onClick={goBack}
+                className="p-1 sm:p-2 group rounded-full bg-transparent hover:bg-blue-500 dark:hover:bg-gray-700 focus:outline-none transition-colors"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500 group-hover:text-white dark:text-gray-300"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
                 >
-                  Modules
-                </button>
-                <button
-                  onClick={() => setActiveTab("quizzes")}
-                  className={`px-4 py-2 rounded-lg ${
-                    activeTab === "quizzes"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  Quizzes
-                </button>
-              </div>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <FaSearch className="absolute left-3 top-3 text-gray-400" />
-              </div>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
+                </svg>
+              </button> */}
             </div>
+            <h1 className="text-base sm:text-xl font-semibold ml-1 sm:ml-3 text-gray-800 dark:text-white truncate">
+              Training
+            </h1>
+          </div>
+
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            {/* Add additional header items here */}
           </div>
         </div>
       </header>

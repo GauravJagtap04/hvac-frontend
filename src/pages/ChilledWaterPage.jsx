@@ -72,6 +72,9 @@ const SimulationPage = () => {
   const [currentSession, setCurrentSession] = useState(null);
   const [sessionError, setSessionError] = useState(null);
   const [authError, setAuthError] = useState(null);
+  const [failureAlert, setFailureAlert] = useState(false);
+  const [failureQueue, setFailureQueue] = useState([]);
+  const [failureData, setFailureData] = useState(null);
   const [invalidFields, setInvalidFields] = useState({
     length: false,
     breadth: false,
@@ -277,6 +280,35 @@ const SimulationPage = () => {
               },
             ].slice(-20)
           );
+
+          // Handle failure scenarios from backend
+          if (data.system_status.failures) {
+            const failuresArray = Object.entries(
+              data.system_status.failures
+            ).map(([key, value]) => ({
+              id: key,
+              message: value.message,
+              severity: value.severity,
+              solution: value.solution,
+              probability: value.probability,
+            }));
+
+            if (failuresArray.length > 0) {
+              // If we're not currently showing a failure alert, show the first one
+              if (!failureAlert) {
+                setFailureData(failuresArray[0]);
+                setFailureAlert(true);
+
+                // Add any remaining failures to the queue
+                if (failuresArray.length > 1) {
+                  setFailureQueue(failuresArray.slice(1));
+                }
+              } else {
+                // If we're already showing a failure alert, just add new failures to the queue
+                setFailureQueue((prev) => [...prev, ...failuresArray]);
+              }
+            }
+          }
         } else if (data.temperature) {
           // Handle simple temperature updates
           setTemperatureData((prev) =>
@@ -324,6 +356,22 @@ const SimulationPage = () => {
     const sanitized = parseFloat(parsedValue.toString());
 
     return sanitized;
+  };
+
+  const getAlertSeverity = (severity) => {
+    switch (severity?.toLowerCase()) {
+      case "critical":
+      case "high":
+        return "error";
+      case "warning":
+      case "medium":
+        return "warning";
+      case "info":
+      case "low":
+        return "info";
+      default:
+        return "error";
+    }
   };
 
   const createSession = async () => {
@@ -1683,6 +1731,92 @@ const SimulationPage = () => {
           </Paper>
         </Grid>
       </Grid>
+      <Snackbar
+        open={failureAlert}
+        autoHideDuration={null}
+        onClose={() => {
+          setFailureAlert(false);
+
+          // Check if there are more failures to show
+          if (failureQueue && failureQueue.length > 0) {
+            // Show the next failure immediately (no need for timeout)
+            const nextFailure = failureQueue[0];
+            const remainingFailures = failureQueue.slice(1);
+
+            setFailureData(nextFailure);
+            setFailureQueue(remainingFailures);
+            setFailureAlert(true);
+          }
+        }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        sx={{
+          mb: 4, // Add margin to bottom to avoid taskbar
+          "& .MuiPaper-root": {
+            opacity: 0.9, // Lower opacity
+            maxWidth: 320, // Control width
+          },
+        }}
+      >
+        <Alert
+          severity={
+            failureData ? getAlertSeverity(failureData.severity) : "error"
+          }
+          variant="filled"
+          onClose={() => {
+            // Don't call setFailureAlert here, let the Snackbar onClose handle it
+            // This prevents double-closing that could skip alerts
+          }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => {
+                // Use the same logic as Snackbar onClose
+                setFailureAlert(false);
+
+                // Check if there are more failures to show
+                if (failureQueue && failureQueue.length > 0) {
+                  // Show the next failure immediately
+                  const nextFailure = failureQueue[0];
+                  const remainingFailures = failureQueue.slice(1);
+
+                  setFailureData(nextFailure);
+                  setFailureQueue(remainingFailures);
+                  setFailureAlert(true);
+                }
+              }}
+            >
+              DISMISS
+            </Button>
+          }
+          sx={{
+            "& .MuiAlert-message": {
+              fontSize: "0.9rem",
+            },
+          }}
+        >
+          <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 0.5 }}>
+            System {failureData?.severity || "Error"}
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 1, fontSize: "0.85rem" }}>
+            {failureData?.message || "Unknown system error occurred"}
+          </Typography>
+          {failureData?.solution && (
+            <Typography
+              variant="body2"
+              sx={{
+                fontStyle: "italic",
+                fontSize: "0.8rem",
+                backgroundColor: alpha(theme.palette.background.paper, 0.2),
+                p: 0.5,
+                borderRadius: 1,
+              }}
+            >
+              Suggested action: {failureData.solution}
+            </Typography>
+          )}
+        </Alert>
+      </Snackbar>
       <Snackbar
         open={invalidParameterOpen}
         autoHideDuration={5000}

@@ -172,6 +172,9 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             <li>
               <MenuItem to="/training" icon={<FaBook />} text="Training" />
             </li>
+            <li>
+              <MenuItem to="/settings" icon={<FaCog />} text="Settings" />
+            </li>
           </ul>
         </nav>
 

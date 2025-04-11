@@ -8,13 +8,15 @@ import {
   useTheme,
   Snackbar,
   Alert,
+  CircularProgress,
 } from "@mui/material";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useDispatch, useSelector } from "react-redux";
 import { setSelectedSystem } from "../store/store";
 import { useOutletContext } from "react-router-dom";
+import { supabase } from "../components/SupabaseClient";
 
 const SimulationsPage = () => {
   const navigate = useNavigate();
@@ -24,10 +26,70 @@ const SimulationsPage = () => {
 
   const [openSnackbar, setOpenSnackbar] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [availableSimulations, setAvailableSimulations] = useState([]);
+  const [error, setError] = useState(null);
 
   const { isSimulationRunning, selectedSystem } = useSelector(
     (state) => state.hvac
   );
+
+  // Fetch user data and filter available simulations
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        setLoading(true);
+
+        // Get the current user
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          setError("User not authenticated");
+          setLoading(false);
+          return;
+        }
+
+        // Fetch the user's simulation permissions
+        const { data, error } = await supabase
+          .from("users")
+          .select("is_split, is_vrf, is_heat, is_chilled")
+          .eq("id", user.id)
+          .single();
+
+        if (error) {
+          console.error("Error fetching user data:", error);
+          setError("Failed to load simulation permissions");
+          setLoading(false);
+          return;
+        }
+
+        // Filter simulations based on user permissions
+        const filteredSimulations = simulations.filter((simulation) => {
+          if (simulation.id === "split-system" && data.is_split) return true;
+          if (
+            simulation.id === "variable-refrigerant-flow-system" &&
+            data.is_vrf
+          )
+            return true;
+          if (simulation.id === "heat-pump-system" && data.is_heat) return true;
+          if (simulation.id === "chilled-water-system" && data.is_chilled)
+            return true;
+          return false;
+        });
+
+        setAvailableSimulations(filteredSimulations);
+        setLoading(false);
+      } catch (err) {
+        console.error("Error in fetchUserData:", err);
+        setError("An unexpected error occurred");
+        setLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, []);
 
   const simulations = [
     {
@@ -142,90 +204,122 @@ const SimulationsPage = () => {
       </header>
 
       <Container maxWidth="xl" sx={{ py: 6 }}>
-        <Grid container spacing={4}>
-          {simulations.map((simulation, index) => (
-            <Grid item xs={12} sm={6} md={4} lg={3} key={simulation.id}>
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-              >
-                <Card
-                  component={motion.div}
-                  whileHover={{
-                    scale: 1.03,
-                    boxShadow: theme.shadows[10],
-                  }}
-                  whileTap={{ scale: 0.98 }}
-                  sx={{
-                    height: "100%",
-                    display: "flex",
-                    flexDirection: "column",
-                    cursor: "pointer",
-                    position: "relative",
-                    overflow: "hidden",
-                    borderRadius: 4,
-                    background: `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
-                    boxShadow: theme.shadows[4],
-                    "&::before": {
-                      content: '""',
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: 4,
-                      background: simulation.color,
-                    },
-                  }}
-                  onClick={() =>
-                    handleSimulationCardClick(
-                      simulation.name,
-                      simulation.id,
-                      simulation.path
-                    )
-                  }
+        {loading ? (
+          <Box
+            display="flex"
+            justifyContent="center"
+            alignItems="center"
+            minHeight="60vh"
+          >
+            <CircularProgress />
+          </Box>
+        ) : error ? (
+          <Box
+            display="flex"
+            justifyContent="center"
+            alignItems="center"
+            minHeight="60vh"
+          >
+            <Alert severity="error">{error}</Alert>
+          </Box>
+        ) : availableSimulations.length === 0 ? (
+          <Box
+            display="flex"
+            justifyContent="center"
+            alignItems="center"
+            minHeight="60vh"
+          >
+            <Alert severity="info">
+              No simulations are available for your account. Please contact your
+              administrator.
+            </Alert>
+          </Box>
+        ) : (
+          <Grid container spacing={4}>
+            {availableSimulations.map((simulation, index) => (
+              <Grid item xs={12} sm={6} md={4} lg={3} key={simulation.id}>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
                 >
-                  <Box
-                    sx={{
-                      p: 4,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: `linear-gradient(135deg, ${simulation.color}22 0%, ${simulation.color}11 100%)`,
+                  <Card
+                    component={motion.div}
+                    whileHover={{
+                      scale: 1.03,
+                      boxShadow: theme.shadows[10],
                     }}
+                    whileTap={{ scale: 0.98 }}
+                    sx={{
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      cursor: "pointer",
+                      position: "relative",
+                      overflow: "hidden",
+                      borderRadius: 4,
+                      background: `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
+                      boxShadow: theme.shadows[4],
+                      "&::before": {
+                        content: '""',
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: 4,
+                        background: simulation.color,
+                      },
+                    }}
+                    onClick={() =>
+                      handleSimulationCardClick(
+                        simulation.name,
+                        simulation.id,
+                        simulation.path
+                      )
+                    }
                   >
-                    <Typography variant="h2" sx={{ fontSize: "3rem" }}>
-                      {simulation.icon}
-                    </Typography>
-                  </Box>
-                  <CardContent sx={{ flexGrow: 1, p: 3 }}>
-                    <Typography
-                      gutterBottom
-                      variant="h6"
-                      component="h2"
+                    <Box
                       sx={{
-                        fontWeight: 600,
-                        color: theme.palette.text.primary,
-                        mb: 2,
+                        p: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: `linear-gradient(135deg, ${simulation.color}22 0%, ${simulation.color}11 100%)`,
                       }}
                     >
-                      {simulation.title}
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: theme.palette.text.secondary,
-                        lineHeight: 1.6,
-                      }}
-                    >
-                      {simulation.description}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </Grid>
-          ))}
-        </Grid>
+                      <Typography variant="h2" sx={{ fontSize: "3rem" }}>
+                        {simulation.icon}
+                      </Typography>
+                    </Box>
+                    <CardContent sx={{ flexGrow: 1, p: 3 }}>
+                      <Typography
+                        gutterBottom
+                        variant="h6"
+                        component="h2"
+                        sx={{
+                          fontWeight: 600,
+                          color: theme.palette.text.primary,
+                          mb: 2,
+                        }}
+                      >
+                        {simulation.title}
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: theme.palette.text.secondary,
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {simulation.description}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              </Grid>
+            ))}
+          </Grid>
+        )}
       </Container>
       <Snackbar
         open={openSnackbar}

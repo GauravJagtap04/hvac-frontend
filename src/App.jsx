@@ -16,6 +16,7 @@ import VRFPage from "./pages/VRFPage";
 import HeatPumpPage from "./pages/HeatPumpPage";
 import ChilledWaterPage from "./pages/ChilledWaterPage";
 import Login from "./components/Login";
+import SignUp from "./components/SignUp";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import TrainingPage from "./pages/TrainingPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -30,6 +31,7 @@ const router = createBrowserRouter(
     <Route>
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<SignUp />} />
       <Route
         element={
           <ProtectedRoute>

@@ -1,12 +1,15 @@
-import React, { useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useOutletContext, useNavigate } from "react-router-dom";
+import { supabase } from "../components/SupabaseClient";
 
 const SettingsPage = () => {
   const { isCollapsed } = useOutletContext();
   const [activeTab, setActiveTab] = useState("general");
+  const navigate = useNavigate();
 
   const tabs = [
     { id: "general", name: "General Settings" },
+    { id: "hvac_systems", name: "HVAC Systems" },
     { id: "system", name: "System Configuration" },
     { id: "notifications", name: "Notifications" },
     { id: "security", name: "Security & Privacy" },
@@ -19,27 +22,7 @@ const SettingsPage = () => {
       <header className="bg-blue-100 dark:bg-gray-800 shadow-lg z-10">
         <div className="px-3 py-2 sm:p-4 flex items-center justify-between">
           <div className="flex items-center space-x-1 sm:space-x-2">
-            <div className="flex items-center space-x-2 sm:space-x-4">
-              <button
-                onClick={goBack}
-                className="p-1 sm:p-2 group rounded-full bg-transparent hover:bg-blue-500 dark:hover:bg-gray-700 focus:outline-none transition-colors"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500 group-hover:text-white dark:text-gray-300"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                  />
-                </svg>
-              </button>
-            </div>
+            <div className="flex items-center space-x-2 sm:space-x-4"></div>
             <h1 className="text-base sm:text-xl font-semibold ml-1 sm:ml-3 text-gray-800 dark:text-white truncate">
               Settings
             </h1>
@@ -80,6 +63,7 @@ const SettingsPage = () => {
           <div className="col-span-12 lg:col-span-9">
             <div className="bg-white shadow-sm rounded-lg">
               {activeTab === "general" && <GeneralSettings />}
+              {activeTab === "hvac_systems" && <HVACSystemSettings />}
               {activeTab === "system" && <SystemSettings />}
               {activeTab === "notifications" && <NotificationSettings />}
               {activeTab === "security" && <SecuritySettings />}
@@ -87,6 +71,218 @@ const SettingsPage = () => {
           </div>
         </div>
       </main>
+    </div>
+  );
+};
+
+// New HVAC Systems Settings Component
+const HVACSystemSettings = () => {
+  const [systemSettings, setSystemSettings] = useState({
+    is_split: false,
+    is_vrf: false,
+    is_heat: false,
+    is_chilled: false,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState({ type: "", text: "" });
+
+  useEffect(() => {
+    fetchUserSettings();
+  }, []);
+
+  const fetchUserSettings = async () => {
+    try {
+      setIsLoading(true);
+      const user = JSON.parse(localStorage.getItem("user"));
+
+      if (!user) {
+        console.error("No user found in localStorage");
+        setIsLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("users")
+        .select("is_split, is_vrf, is_heat, is_chilled")
+        .eq("id", user.id)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setSystemSettings({
+          is_split: data.is_split || false,
+          is_vrf: data.is_vrf || false,
+          is_heat: data.is_heat || false,
+          is_chilled: data.is_chilled || false,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching user settings:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggle = (field) => {
+    setSystemSettings({
+      ...systemSettings,
+      [field]: !systemSettings[field],
+    });
+  };
+
+  const saveSettings = async () => {
+    try {
+      setIsSaving(true);
+      setSaveMessage({ type: "", text: "" });
+
+      const user = JSON.parse(localStorage.getItem("user"));
+
+      if (!user) {
+        setSaveMessage({
+          type: "error",
+          text: "User not found. Please log in again.",
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from("users")
+        .update(systemSettings)
+        .eq("id", user.id);
+
+      if (error) throw error;
+
+      setSaveMessage({
+        type: "success",
+        text: "HVAC system settings saved successfully!",
+      });
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      setSaveMessage({
+        type: "error",
+        text: "Failed to save settings. Please try again.",
+      });
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setSaveMessage({ type: "", text: "" }), 3000);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex justify-center">
+        <div className="animate-pulse">Loading settings...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-medium text-gray-900">
+          HVAC System Visibility
+        </h2>
+        <button
+          onClick={saveSettings}
+          disabled={isSaving}
+          className={`px-4 py-2 rounded-md ${
+            isSaving
+              ? "bg-gray-300 cursor-not-allowed"
+              : "bg-blue-600 text-white hover:bg-blue-700"
+          } transition-colors`}
+        >
+          {isSaving ? "Saving..." : "Save Changes"}
+        </button>
+      </div>
+
+      {saveMessage.text && (
+        <div
+          className={`p-3 rounded-md ${
+            saveMessage.type === "success"
+              ? "bg-green-50 text-green-800"
+              : "bg-red-50 text-red-800"
+          }`}
+        >
+          {saveMessage.text}
+        </div>
+      )}
+
+      <p className="text-sm text-gray-500">
+        Select which HVAC systems you want to see in the application. The
+        selected systems will appear in your dashboard and simulations.
+      </p>
+
+      <div className="space-y-4">
+        <SettingItem
+          title="Split System"
+          description="Traditional HVAC system with indoor and outdoor units"
+        >
+          <div className="flex items-center">
+            <label className="inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={systemSettings.is_split}
+                onChange={() => handleToggle("is_split")}
+              />
+              <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+        </SettingItem>
+
+        <SettingItem
+          title="VRF System"
+          description="Variable Refrigerant Flow system for multiple zones"
+        >
+          <div className="flex items-center">
+            <label className="inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={systemSettings.is_vrf}
+                onChange={() => handleToggle("is_vrf")}
+              />
+              <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+        </SettingItem>
+
+        <SettingItem
+          title="Heat Pump System"
+          description="Energy-efficient heating and cooling system"
+        >
+          <div className="flex items-center">
+            <label className="inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={systemSettings.is_heat}
+                onChange={() => handleToggle("is_heat")}
+              />
+              <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+        </SettingItem>
+
+        <SettingItem
+          title="Chilled Water System"
+          description="Central cooling system for larger buildings"
+        >
+          <div className="flex items-center">
+            <label className="inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={systemSettings.is_chilled}
+                onChange={() => handleToggle("is_chilled")}
+              />
+              <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+        </SettingItem>
+      </div>
     </div>
   );
 };

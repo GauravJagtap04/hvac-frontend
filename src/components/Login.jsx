@@ -155,6 +155,15 @@ export default function Login() {
           >
             {loading ? "Authenticating..." : "Sign in"}
           </button>
+
+          <div className="text-center mt-4">
+            <Link
+              to="/signup"
+              className="text-sm font-medium text-blue-400 hover:text-blue-300"
+            >
+              Don't have an account? Sign up
+            </Link>
+          </div>
         </form>
 
         <div className="text-center text-xs text-slate-500">

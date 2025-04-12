@@ -2,6 +2,23 @@ import { configureStore } from "@reduxjs/toolkit";
 import { createSlice } from "@reduxjs/toolkit";
 import authReducer from "./slices/authSlice";
 
+const getInitialTheme = () => {
+  if (typeof window !== "undefined" && localStorage) {
+    const storedTheme = localStorage.getItem("theme");
+    if (storedTheme) {
+      return storedTheme;
+    }
+  }
+
+  if (typeof window !== "undefined" && window.matchMedia) {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+
+  return "light";
+};
+
 const initialState = {
   selectedSystem: "split system", // or "variable refrigernat flow system", "heat pump system", "chilled water system"
   systems: {
@@ -221,6 +238,7 @@ const initialState = {
   isConnected: false,
   isSimulationRunning: false,
   isSimulationPaused: false,
+  theme: getInitialTheme(),
 };
 
 const hvacSlice = createSlice({
@@ -261,6 +279,12 @@ const hvacSlice = createSlice({
     setSelectedSystem: (state, action) => {
       state.selectedSystem = action.payload;
     },
+    setTheme: (state, action) => {
+      state.theme = action.payload;
+      if (typeof window !== "undefined" && localStorage) {
+        localStorage.setItem("theme", action.payload);
+      }
+    },
   },
 });
 
@@ -272,6 +296,7 @@ export const {
   setSimulationStatus,
   setSimulationPaused,
   setSelectedSystem,
+  setTheme,
 } = hvacSlice.actions;
 
 export const store = configureStore({

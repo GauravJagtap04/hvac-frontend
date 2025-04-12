@@ -4,36 +4,43 @@ import { supabase } from "../components/SupabaseClient";
 import { useNavigate } from "react-router-dom";
 import ChilledWaterSystemModel from "../components/Models/ChilledWaterSystemModel";
 import WeatherIntegration from "../components/WeatherIntegration";
+
+import DraggableBox from "../components/moveable";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Slider } from "@/components/ui/slider";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Toaster } from "sonner";
+import { toast } from "sonner";
 import {
-  Box,
-  Grid,
-  Paper,
-  Typography,
-  Slider,
-  TextField,
   Select,
-  MenuItem,
-  Button,
-  FormControl,
-  InputLabel,
-  CircularProgress,
-  Chip,
-  useTheme,
-  alpha,
-  Snackbar,
-  Alert,
-} from "@mui/material";
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SelectGroup,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
 import {
   LineChart,
   Line,
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { ThermostatAuto, Speed, Power, Opacity } from "@mui/icons-material";
+
 import {
   updateRoomParameters,
   updateHVACParameters,
@@ -43,10 +50,11 @@ import {
   setSimulationPaused,
 } from "../store/store";
 
+import { Sun, Moon } from "lucide-react";
+
 const SYSTEM_TYPE = "chilledWaterSystem";
 
 const SimulationPage = () => {
-  const theme = useTheme();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { isConnected, isSimulationRunning, isSimulationPaused } = useSelector(
@@ -66,7 +74,6 @@ const SimulationPage = () => {
   const [weatherErrorOpen, setWeatherErrorOpen] = useState(false);
   const [weatherErrorMessage, setWeatherErrorMessage] = useState("");
   const [invalidParameterOpen, setInvalidParameterOpen] = useState(false);
-  const [fanSpeedWarning, setFanSpeedWarning] = useState(false);
   const [invalidParameterMessage, setInvalidParameterMessage] = useState("");
   const [errorStartingSimulation, setErrorStartingSimulation] = useState(false);
   const [currentSession, setCurrentSession] = useState(null);
@@ -75,12 +82,46 @@ const SimulationPage = () => {
   const [failureAlert, setFailureAlert] = useState(false);
   const [failureQueue, setFailureQueue] = useState([]);
   const [failureData, setFailureData] = useState(null);
+  const [theme, setTheme] = useState("light");
+  const [showFailureBox, setShowFailureBox] = useState(false);
   const [invalidFields, setInvalidFields] = useState({
     length: false,
     breadth: false,
     height: false,
   });
 
+  // theme state
+  useEffect(() => {
+    const rootElement = document.getElementById("root");
+    const isDark = rootElement?.classList.contains("dark");
+    setTheme(isDark ? "dark" : "light");
+  }, []);
+
+  // fan speed toast
+  useEffect(() => {
+    let fanSpeedToast;
+    if (hvacParameters.fanSpeed === 0) {
+      fanSpeedToast = toast.warning(
+        "Fan speed is set to 0%. The system may not function effectively.",
+        {
+          duration: 5000,
+        }
+      );
+    }
+    toast.dismiss(fanSpeedToast);
+  }, [hvacParameters.fanSpeed]);
+
+  // target temperature reached toast
+  useEffect(() => {
+    if (targetReachAlert) {
+      toast.success("Target temperature reached successfully.", {
+        duration: 5000,
+      });
+    }
+    setTargetReachAlert(false);
+  }, [targetReachAlert]);
+
+  // sending data to backend
   useEffect(() => {
     if (
       ws &&
@@ -132,11 +173,10 @@ const SimulationPage = () => {
 
       setInvalidFields(newInvalidFields);
       setErrorStartingSimulation(Object.values(newInvalidFields).some(Boolean));
-
-      setFanSpeedWarning(hvacParameters.fanSpeed === 0);
     }
   }, [isConnected, ws, isSimulationRunning]);
 
+  // time to target timer
   useEffect(() => {
     let timer;
     if (isSimulationRunning && !isSimulationPaused && countdownTime > 0) {
@@ -147,6 +187,7 @@ const SimulationPage = () => {
     return () => clearInterval(timer);
   }, [isSimulationRunning, isSimulationPaused, countdownTime]);
 
+  // session creation and status update
   useEffect(() => {
     if (isSimulationRunning && !isSimulationPaused) {
       const currentTemp = systemStatus.roomTemperature;
@@ -196,6 +237,7 @@ const SimulationPage = () => {
     isSimulationPaused,
   ]);
 
+  // WebSocket connection
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const activeUserId = sessionStorage.getItem("activeUserId");
@@ -282,31 +324,42 @@ const SimulationPage = () => {
           );
 
           // Handle failure scenarios from backend
-          if (data.system_status.failures) {
-            const failuresArray = Object.entries(
-              data.system_status.failures
-            ).map(([key, value]) => ({
-              id: key,
-              message: value.message,
-              severity: value.severity,
-              solution: value.solution,
-              probability: value.probability,
-            }));
+          if (data.system_status) {
+            // Check if failures exist in the system status
+            if (
+              data.system_status.failures &&
+              Object.keys(data.system_status.failures).length > 0
+            ) {
+              const failuresArray = Object.entries(
+                data.system_status.failures
+              ).map(([key, value]) => ({
+                id: key,
+                message: value.message,
+                severity: value.severity,
+                solution: value.solution,
+                probability: value.probability,
+              }));
 
-            if (failuresArray.length > 0) {
-              // If we're not currently showing a failure alert, show the first one
-              if (!failureAlert) {
-                setFailureData(failuresArray[0]);
-                setFailureAlert(true);
+              if (failuresArray.length > 0) {
+                // If we're not currently showing a failure alert, show the first one
+                if (!failureAlert) {
+                  setFailureData(failuresArray[0]);
+                  setFailureAlert(true);
 
-                // Add any remaining failures to the queue
-                if (failuresArray.length > 1) {
-                  setFailureQueue(failuresArray.slice(1));
+                  // Add any remaining failures to the queue
+                  if (failuresArray.length > 1) {
+                    setFailureQueue(failuresArray.slice(1));
+                  }
+                } else {
+                  // If we're already showing a failure alert, just add new failures to the queue
+                  setFailureQueue((prev) => [...prev, ...failuresArray]);
                 }
-              } else {
-                // If we're already showing a failure alert, just add new failures to the queue
-                setFailureQueue((prev) => [...prev, ...failuresArray]);
               }
+            } else {
+              // No failures present in the system status - clear all failures
+              setFailureData(null);
+              setFailureAlert(false);
+              setFailureQueue([]);
             }
           }
         } else if (data.temperature) {
@@ -372,6 +425,10 @@ const SimulationPage = () => {
       default:
         return "error";
     }
+  };
+
+  const toggleFailureBox = () => {
+    setShowFailureBox((prev) => !prev);
   };
 
   const createSession = async () => {
@@ -540,11 +597,21 @@ const SimulationPage = () => {
   };
 
   const handleWeatherError = (errorMessage) => {
+    toast.dismiss("weather-loading");
+    toast.error(`Failed to fetch weather: ${errorMessage}`, {
+      duration: 3000,
+      id: "weather-error",
+    });
     setWeatherErrorMessage(errorMessage);
     setWeatherErrorOpen(true);
   };
 
   const handleWeatherSuccess = (location, temperature) => {
+    toast.dismiss("weather-loading");
+    toast.success(`Weather fetched: ${temperature}°C in ${location}`, {
+      duration: 3000,
+      id: "weather-success",
+    });
     setWeatherSuccessMessage(
       `Weather fetched successfully: ${temperature}°C in ${location}`
     );
@@ -632,1249 +699,1057 @@ const SimulationPage = () => {
     const update = { [parameter]: value };
     dispatch(updateHVACParameters({ system: SYSTEM_TYPE, parameters: update }));
     ws?.send(JSON.stringify({ type: "hvac_parameters", data: update }));
+  };
 
-    if (parameter === "fanSpeed" && value === 0) {
-      setFanSpeedWarning(true);
-    } else if (parameter === "fanSpeed" && value > 0) {
-      setFanSpeedWarning(false);
+  const handleThemeChange = () => {
+    const rootElement = document.getElementById("root");
+    if (theme === "light") {
+      rootElement.classList.add("dark");
+      setTheme("dark");
+    } else {
+      rootElement.classList.remove("dark");
+      setTheme("light");
     }
   };
 
-  const hasInvalidFields = Object.values(invalidFields).some(Boolean);
-
   const StatusCard = ({ title, value, unit, icon }) => (
-    <Paper
-      sx={{
-        p: 3,
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        background: `linear-gradient(135deg, ${alpha(
-          theme.palette.primary.main,
-          0.05
-        )} 0%, ${alpha(theme.palette.primary.main, 0.15)} 100%)`,
-        backdropFilter: "blur(10px)",
-        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-        borderRadius: 2,
-        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-        "&:hover": {
-          transform: "translateY(-4px)",
-          boxShadow: `0 8px 24px -4px ${alpha(
-            theme.palette.primary.main,
-            0.2
-          )}`,
-          border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-        },
-      }}
-    >
-      {icon}
-      <Typography variant="h6" sx={{ mt: 2, color: "text.secondary" }}>
-        {title}
-      </Typography>
-      <Typography
-        variant="h3"
-        sx={{
-          mt: 2,
-          mb: 1,
-          color: theme.palette.primary.main,
-          fontWeight: "bold",
-        }}
-      >
-        {value !== undefined ? value : "0.0"}
-      </Typography>
-      <Typography variant="body1" sx={{ color: "text.secondary" }}>
-        {unit}
-      </Typography>
-    </Paper>
+    <Card className="w-full h-full min-w-[160px] bg-background">
+      <CardContent className="flex flex-col items-center p-6">
+        {icon}
+        <CardTitle className="mt-4 text-muted-foreground">{title}</CardTitle>
+        <span className="mt-2 mb-1 text-4xl font-bold text-primary">
+          {value !== undefined ? value : "0.0"}
+        </span>
+        <p className="text-sm text-muted-foreground">{unit}</p>
+      </CardContent>
+    </Card>
   );
 
+  const hasInvalidFields = Object.values(invalidFields).some(Boolean);
+
   return (
-    <Box
-      sx={{
-        p: 4,
-        minHeight: "100vh",
-        background: `linear-gradient(135deg, ${
-          theme.palette.background.default
-        } 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`,
-      }}
-    >
-      <Grid container spacing={4}>
-        <Grid item xs={12}>
-          <Box
-            sx={{
-              mb: 4,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <Typography
-              variant="h3"
-              sx={{
-                color: theme.palette.primary.main,
-                fontWeight: "bold",
-                letterSpacing: "-0.5px",
-              }}
-            >
-              Chilled Water System Simulation Dashboard
-            </Typography>
-            <Chip
-              label={isConnected ? "Connected" : "Disconnected"}
-              color={isConnected ? "success" : "error"}
-              sx={{
-                fontSize: "1rem",
-                py: 2.5,
-                px: 3,
-                borderRadius: 2,
-                "& .MuiChip-label": { fontWeight: 500 },
-              }}
+    <div className="w-full overflow-x-hidden bg-background">
+      <div className="py-6 px-3 sm:px-6 md:px-6 lg-px-8 bg-background shadow-md w-full mx-auto">
+        <div className="flex items-center justify-between w-full">
+          <h1 className="text-3xl font-[900] mb-6 font-rubik text-primary">
+            Chilled Water System Simulator
+          </h1>
+          <div>
+            {/* Connection status */}
+            <div className="mb-4 flex items-center">
+              <Badge
+                variant={isConnected ? "success" : "destructive"}
+                className="mr-2 rounded-sm text-sm py-2 px-4"
+              >
+                {isConnected ? "Connected" : "Disconnected"}
+              </Badge>
+
+              <div className="flex justify-center mr-2">
+                <Button
+                  variant="outline"
+                  onClick={toggleFailureBox}
+                  className="flex items-center h-[38] gap-2 text-primary hover:bg-primary dark:hover:bg-primary hover:text-background transition-all duration-400"
+                >
+                  {showFailureBox ? "Hide" : "Show"} Failure Log
+                </Button>
+              </div>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div
+                      className={`w-13 h-7 border border-input p-0.5 bg-background rounded-full relative flex items-center cursor-pointer hover:border-primary/50 transition-all duration-200 inset-shadow-sm shadow-primary inset-shadow-primary/20 dark:inset-shadow-primary/20 dark:shadow-primary/10 dark:shadow-sm`}
+                      onClick={handleThemeChange}
+                    >
+                      <div
+                        className={`w-6 h-6 bg-primary rounded-full absolute flex items-center justify-center transition-transform duration-300 ${
+                          theme === "dark" ? "translate-x-6" : "translate-x-0"
+                        }`}
+                      >
+                        {theme === "dark" ? (
+                          <Moon className="h-4 w-4 text-primary-foreground" />
+                        ) : (
+                          <Sun className="h-3.5 w-3.5 text-background" />
+                        )}
+                      </div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{theme === "dark" ? "Light mode" : "Dark mode"}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              {authError && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertTitle>Authentication Error</AlertTitle>
+                  <AlertDescription>{authError}</AlertDescription>
+                  <Button onClick={navigate("/login")}>Login</Button>
+                </Alert>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* System Status Section */}
+        <div className="w-full">
+          <h2 className="text-md font-bold mb-2 text-primary px-6">
+            System Status
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 lg:gap-4 w-full overflow-x-auto pb-2">
+            <StatusCard
+              title="Room Temperature"
+              value={(systemStatus?.roomTemperature || 25.0).toFixed(1)}
+              unit="°C"
             />
-          </Box>
-        </Grid>
+            <StatusCard
+              title="Energy Usage"
+              value={((systemStatus?.energyConsumptionW || 0) / 1000).toFixed(
+                2
+              )}
+              unit="kW"
+            />
+            <StatusCard
+              title="COP"
+              value={(systemStatus?.cop || 3.0).toFixed(2)}
+              unit=""
+            />
+            <StatusCard
+              title="Water Flow"
+              value={(systemStatus?.waterFlowRate || 0.5).toFixed(2)}
+              unit="L/s"
+            />
+          </div>
+        </div>
 
-        <Grid item xs={12} md={3}>
-          <StatusCard
-            title="Room Temperature"
-            value={(systemStatus?.roomTemperature || 25.0).toFixed(1)}
-            unit="°C"
-            icon={
-              <ThermostatAuto
-                sx={{ fontSize: 48, color: theme.palette.primary.main }}
-              />
-            }
-          />
-        </Grid>
-
-        <Grid item xs={12} md={3}>
-          <StatusCard
-            title="Energy Usage"
-            value={((systemStatus?.energyConsumptionW || 0) / 1000).toFixed(2)}
-            unit="kW"
-            icon={
-              <Power sx={{ fontSize: 48, color: theme.palette.primary.main }} />
-            }
-          />
-        </Grid>
-
-        <Grid item xs={12} md={3}>
-          <StatusCard
-            title="COP"
-            value={(systemStatus?.cop || 3.0).toFixed(2)}
-            unit=""
-            icon={
-              <Speed sx={{ fontSize: 48, color: theme.palette.primary.main }} />
-            }
-          />
-        </Grid>
-
-        <Grid item xs={12} md={3}>
-          <StatusCard
-            title="Water Flow"
-            value={(systemStatus?.waterFlowRate || 0.5).toFixed(1)}
-            unit="L/s"
-            icon={
-              <Opacity
-                sx={{ fontSize: 48, color: theme.palette.primary.main }}
-              />
-            }
-          />
-        </Grid>
-
-        <Grid item xs={12}>
-          <Paper
-            sx={{
-              p: 4,
-              mb: 4,
-              background: alpha(theme.palette.background.paper, 0.8),
-              backdropFilter: "blur(10px)",
-              borderRadius: 2,
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-            }}
-          >
-            <Typography
-              variant="h5"
-              gutterBottom
-              sx={{ color: theme.palette.primary.main, fontWeight: "bold" }}
-            >
-              Temperature History
-            </Typography>
-            <ResponsiveContainer width="100%" height={400}>
-              <LineChart data={temperatureData}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke={alpha(theme.palette.text.primary, 0.1)}
-                />
-                <XAxis
-                  dataKey="time"
-                  stroke={theme.palette.text.secondary}
-                  tick={{ fill: theme.palette.text.secondary }}
-                />
-                <YAxis
-                  stroke={theme.palette.text.secondary}
-                  tick={{ fill: theme.palette.text.secondary }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: alpha(theme.palette.background.paper, 0.9),
-                    border: `1px solid ${alpha(
-                      theme.palette.primary.main,
-                      0.1
-                    )}`,
-                    borderRadius: 8,
-                  }}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="temperature"
-                  stroke={theme.palette.primary.main}
-                  name="Room Temperature"
-                  strokeWidth={3}
-                  dot={false}
-                  activeDot={{ r: 8 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey={() => roomParameters.targetTemp}
-                  stroke={theme.palette.secondary.main}
-                  name="Target Temperature"
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Paper
-            sx={{
-              p: 4,
-              height: "100%",
-              background: alpha(theme.palette.background.paper, 0.8),
-              backdropFilter: "blur(10px)",
-              borderRadius: 2,
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-            }}
-          >
-            <Typography
-              variant="h5"
-              gutterBottom
-              sx={{
-                color: theme.palette.primary.main,
-                fontWeight: "bold",
-                mb: 3,
-              }}
-            >
-              Room Parameters
-            </Typography>
-            <Grid container spacing={4}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Length (m)"
-                  type="number"
-                  value={roomParameters.length}
-                  error={invalidFields.length}
-                  helperText={
-                    invalidFields.length
-                      ? "Length cannot be zero or negative."
-                      : ""
-                  }
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    (hasInvalidFields && !invalidFields.length)
-                  }
-                  onChange={(e) =>
-                    handleRoomParameterChange("length")(
-                      e,
-                      sanitizeNumericInput(e.target.value || 0)
-                    )
-                  }
-                  inputProps={{ step: 0.1, min: 1 }}
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      "& fieldset": {
-                        borderColor: invalidFields.length
-                          ? theme.palette.error.main
-                          : alpha(theme.palette.primary.main, 0.2),
-                      },
-                      "&:hover fieldset": {
-                        borderColor: invalidFields.length
-                          ? theme.palette.error.main
-                          : alpha(theme.palette.primary.main, 0.3),
-                      },
-                    },
-                  }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Width (m)"
-                  type="number"
-                  value={roomParameters.breadth}
-                  error={invalidFields.breadth}
-                  helperText={
-                    invalidFields.breadth
-                      ? "Width cannot be zero or negative"
-                      : ""
-                  }
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    (hasInvalidFields && !invalidFields.breadth)
-                  }
-                  onChange={(e) =>
-                    handleRoomParameterChange("breadth")(
-                      e,
-                      sanitizeNumericInput(e.target.value || 0)
-                    )
-                  }
-                  inputProps={{ step: 0.1, min: 1 }}
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      "& fieldset": {
-                        borderColor: invalidFields.breadth
-                          ? theme.palette.error.main
-                          : alpha(theme.palette.primary.main, 0.2),
-                      },
-                      "&:hover fieldset": {
-                        borderColor: invalidFields.breadth
-                          ? theme.palette.error.main
-                          : alpha(theme.palette.primary.main, 0.3),
-                      },
-                    },
-                  }}
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Height (m)"
-                  type="number"
-                  value={roomParameters.height}
-                  error={invalidFields.height}
-                  helperText={
-                    invalidFields.height
-                      ? "Height cannot be zero or negative"
-                      : ""
-                  }
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    (hasInvalidFields && !invalidFields.height)
-                  }
-                  onChange={(e) =>
-                    handleRoomParameterChange("height")(
-                      e,
-                      sanitizeNumericInput(e.target.value || 0)
-                    )
-                  }
-                  inputProps={{ step: 0.1, min: 1 }}
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      "& fieldset": {
-                        borderColor: invalidFields.height
-                          ? theme.palette.error.main
-                          : alpha(theme.palette.primary.main, 0.2),
-                      },
-                      "&:hover fieldset": {
-                        borderColor: invalidFields.height
-                          ? theme.palette.error.main
-                          : alpha(theme.palette.primary.main, 0.3),
-                      },
-                    },
-                  }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="No. of People"
-                  type="number"
-                  value={roomParameters.numPeople}
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    hasInvalidFields
-                  }
-                  onChange={(e) =>
-                    handleRoomParameterChange("numPeople")(
-                      e,
-                      sanitizeNumericInput(e.target.value || 0)
-                    )
-                  }
-                  inputProps={{ step: 1, min: 0 }}
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      "& fieldset": {
-                        borderColor: alpha(theme.palette.primary.main, 0.2),
-                      },
-                      "&:hover fieldset": {
-                        borderColor: alpha(theme.palette.primary.main, 0.3),
-                      },
-                    },
-                  }}
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <FormControl
-                  fullWidth
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      "& fieldset": {
-                        borderColor: alpha(theme.palette.primary.main, 0.2),
-                      },
-                      "&:hover fieldset": {
-                        borderColor: alpha(theme.palette.primary.main, 0.3),
-                      },
-                    },
-                  }}
-                >
-                  <InputLabel
-                    sx={{
-                      backgroundColor: theme.palette.background.paper,
-                      padding: "0 6px",
-                    }}
-                  >
-                    Mode
-                  </InputLabel>
-                  <Select
-                    value={roomParameters.mode}
-                    onChange={(e) =>
-                      handleRoomParameterChange("mode")(e, e.target.value)
-                    }
-                    disabled={
-                      (isSimulationRunning && !isSimulationPaused) ||
-                      hasInvalidFields
-                    }
-                  >
-                    <MenuItem value="cooling">Cooling</MenuItem>
-                    <MenuItem value="heating">Heating</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl
-                  fullWidth
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      "& fieldset": {
-                        borderColor: alpha(theme.palette.primary.main, 0.2),
-                      },
-                      "&:hover fieldset": {
-                        borderColor: alpha(theme.palette.primary.main, 0.3),
-                      },
-                    },
-                  }}
-                >
-                  <InputLabel
-                    sx={{
-                      backgroundColor: theme.palette.background.paper,
-                      padding: "0 6px",
-                    }}
-                  >
-                    Wall Insulation Level
-                  </InputLabel>
-                  <Select
-                    value={roomParameters.wallInsulation}
-                    onChange={(e) =>
-                      handleRoomParameterChange("wallInsulation")(
-                        e,
-                        e.target.value
-                      )
-                    }
-                    disabled={
-                      (isSimulationRunning && !isSimulationPaused) ||
-                      hasInvalidFields
-                    }
-                  >
-                    <MenuItem value="low">Low</MenuItem>
-                    <MenuItem value="medium">Medium</MenuItem>
-                    <MenuItem value="high">High</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12}>
-                <Typography gutterBottom>
-                  Current Room Temperature: {roomParameters.currentTemp}°C
-                </Typography>
-                <Slider
-                  value={roomParameters.currentTemp}
-                  onChange={handleRoomParameterChange("currentTemp")}
-                  min={10}
-                  max={40}
-                  step={0.5}
-                  marks
-                  valueLabelDisplay="auto"
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    hasInvalidFields
-                  }
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <Typography gutterBottom>
-                  Target Temperature: {roomParameters.targetTemp}°C
-                </Typography>
-                <Slider
-                  value={roomParameters.targetTemp}
-                  onChange={handleRoomParameterChange("targetTemp")}
-                  min={16}
-                  max={30}
-                  step={0.5}
-                  marks
-                  valueLabelDisplay="auto"
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    hasInvalidFields
-                  }
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <Typography gutterBottom>
-                  External Temperature: {roomParameters.externalTemp}°C
-                  <WeatherIntegration
-                    systemType={SYSTEM_TYPE}
-                    websocket={ws}
-                    disabled={
-                      (isSimulationRunning && !isSimulationPaused) ||
-                      hasInvalidFields
-                    }
-                    currentTemp={roomParameters.externalTemp}
-                    onError={handleWeatherError}
-                    onSuccess={handleWeatherSuccess}
+        {/* { Temperature History Section } */}
+        <div className="w-full mt-6">
+          <Card className="p-6 bg-background/80 rounded-lg border border-primary/10">
+            <CardHeader className="p-0 pb-4">
+              <CardTitle>Temperature History</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ResponsiveContainer
+                width="100%"
+                height={400}
+                className="flex items-center justify-center"
+              >
+                <LineChart data={temperatureData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--accent)" />
+                  <XAxis
+                    dataKey="time"
+                    stroke="var(--border)"
+                    tick={{ fill: "rgba(156, 163, 175, 0.8)" }}
                   />
-                </Typography>
-                <Slider
-                  value={roomParameters.externalTemp}
-                  onChange={handleRoomParameterChange("externalTemp")}
-                  min={-10}
-                  max={45}
-                  step={0.5}
-                  marks
-                  valueLabelDisplay="auto"
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    hasInvalidFields
-                  }
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <Typography gutterBottom>
-                  Fan Coil Units: {roomParameters.fanCoilUnits || 1}
-                </Typography>
-                <Slider
-                  value={roomParameters.fanCoilUnits || 1}
-                  onChange={handleRoomParameterChange("fanCoilUnits")}
-                  min={1}
-                  max={8}
-                  step={1}
-                  marks
-                  valueLabelDisplay="auto"
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    hasInvalidFields
-                  }
-                />
-              </Grid>
-            </Grid>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Paper
-            sx={{
-              p: 4,
-              height: "100%",
-              background: alpha(theme.palette.background.paper, 0.8),
-              backdropFilter: "blur(10px)",
-              borderRadius: 2,
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-            }}
-          >
-            <Typography
-              variant="h5"
-              gutterBottom
-              sx={{
-                color: theme.palette.primary.main,
-                fontWeight: "bold",
-                mb: 3,
-              }}
-            >
-              HVAC Parameters
-            </Typography>
-            <Grid container spacing={4}>
-              <Grid item xs={12}>
-                <Typography gutterBottom>
-                  Power: {hvacParameters.power} kW
-                </Typography>
-                <Slider
-                  value={hvacParameters.power}
-                  onChange={handleHVACParameterChange("power")}
-                  min={1}
-                  max={10}
-                  step={0.5}
-                  marks
-                  valueLabelDisplay="auto"
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    hasInvalidFields
-                  }
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <Typography gutterBottom>
-                  Airflow Rate: {hvacParameters.airFlowRate} m³/s
-                </Typography>
-                <Slider
-                  value={hvacParameters.airFlowRate}
-                  onChange={handleHVACParameterChange("airFlowRate")}
-                  min={0.1}
-                  max={2.0}
-                  step={0.1}
-                  marks
-                  valueLabelDisplay="auto"
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    hasInvalidFields
-                  }
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <Typography gutterBottom>
-                  Fan Speed: {hvacParameters.fanSpeed}%
-                </Typography>
-                <Slider
-                  value={hvacParameters.fanSpeed}
-                  onChange={handleHVACParameterChange("fanSpeed")}
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    hasInvalidFields
-                  }
-                  min={0}
-                  max={100}
-                  step={1}
-                  marks
-                  valueLabelDisplay="auto"
-                />
-                {fanSpeedWarning && (
-                  <Typography
-                    color="warning.main"
-                    variant="caption"
-                    sx={{
-                      display: "block",
-                      mt: 1,
-                      fontWeight: "medium",
-                      bgcolor: alpha(theme.palette.warning.main, 0.1),
-                      p: 1,
-                      borderRadius: 1,
-                      border: `1px solid ${alpha(
-                        theme.palette.warning.main,
-                        0.3
-                      )}`,
+                  <YAxis
+                    stroke="var(--border)"
+                    tick={{ fill: "rgba(156, 163, 175, 0.8)" }}
+                  />
+                  <RechartsTooltip
+                    contentStyle={{
+                      backgroundColor: "rgba(var(--background-rgb), 0.75)",
+                      border: "2px solid var(--border)",
+                      borderRadius: "8px",
+                      color: "var(--primary)",
+                      backdropFilter: "blur(8px)",
+                      WebkitBackdropFilter: "blur(8px)",
                     }}
-                  >
-                    Warning: Fan speed set to 0. HVAC system may not work as
-                    expected.
-                  </Typography>
-                )}
-              </Grid>
+                  />
 
-              <Grid item xs={12}>
-                <Typography gutterBottom>
-                  Water Flow Rate: {hvacParameters.chilledWaterFlowRate || 0.5}{" "}
-                  L/s
-                </Typography>
-                <Slider
-                  value={hvacParameters.chilledWaterFlowRate}
-                  onChange={handleHVACParameterChange("chilledWaterFlowRate")}
-                  min={0.1}
-                  max={5.0}
-                  step={0.1}
-                  marks
-                  valueLabelDisplay="auto"
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    hasInvalidFields
-                  }
-                />
-              </Grid>
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="temperature"
+                    stroke="var(--primary)"
+                    name="Room Temperature"
+                    strokeWidth={3}
+                    dot={false}
+                    activeDot={{ r: 8, fill: "var(--primary)" }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey={() => roomParameters.targetTemp}
+                    stroke="var(--primary)"
+                    name="Target Temperature"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
 
-              <Grid item xs={12}>
-                <Typography gutterBottom>
-                  Chilled Water Supply Temperature:{" "}
-                  {hvacParameters.chilledWaterSupplyTemp} °C
-                </Typography>
-                <Slider
-                  value={hvacParameters.chilledWaterSupplyTemp}
-                  onChange={handleHVACParameterChange("chilledWaterSupplyTemp")}
-                  min={4.0}
-                  max={15.0}
-                  step={0.5}
-                  marks
-                  valueLabelDisplay="auto"
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    hasInvalidFields
-                  }
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <Typography gutterBottom>
-                  Chilled Water Return Temperature:{" "}
-                  {hvacParameters.chilledWaterReturnTemp} °C
-                </Typography>
-                <Slider
-                  value={hvacParameters.chilledWaterReturnTemp}
-                  onChange={handleHVACParameterChange("chilledWaterReturnTemp")}
-                  min={8.0}
-                  max={20.0}
-                  step={0.5}
-                  marks
-                  valueLabelDisplay="auto"
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    hasInvalidFields
-                  }
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <Typography gutterBottom>
-                  Pump Power: {hvacParameters.pumpPower} kW
-                </Typography>
-                <Slider
-                  value={hvacParameters.pumpPower}
-                  onChange={handleHVACParameterChange("pumpPower")}
-                  min={0.2}
-                  max={5.0}
-                  step={0.1}
-                  marks
-                  valueLabelDisplay="auto"
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    hasInvalidFields
-                  }
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <Typography gutterBottom>
-                  Glycol Percentage: {hvacParameters.glycolPercentage} %
-                </Typography>
-                <Slider
-                  value={hvacParameters.glycolPercentage}
-                  onChange={handleHVACParameterChange("glycolPercentage")}
-                  min={0}
-                  max={50}
-                  step={5}
-                  marks
-                  valueLabelDisplay="auto"
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    hasInvalidFields
-                  }
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <Typography gutterBottom>
-                  Heat Exchanger Efficiency:{" "}
-                  {hvacParameters.heatExchangerEfficiency} %
-                </Typography>
-                <Slider
-                  value={hvacParameters.heatExchangerEfficiency}
-                  onChange={handleHVACParameterChange(
-                    "heatExchangerEfficiency"
-                  )}
-                  min={0.5}
-                  max={0.98}
-                  step={0.01}
-                  disabled={
-                    (isSimulationRunning && !isSimulationPaused) ||
-                    hasInvalidFields
-                  }
-                  marks
-                  valueLabelDisplay="auto"
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <FormControl
-                  fullWidth
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      "& fieldset": {
-                        borderColor: alpha(theme.palette.primary.main, 0.2),
-                      },
-                      "&:hover fieldset": {
-                        borderColor: alpha(theme.palette.primary.main, 0.3),
-                      },
-                    },
-                  }}
-                >
-                  <InputLabel
-                    sx={{
-                      backgroundColor: theme.palette.background.paper,
-                      padding: "0 6px",
-                    }}
-                  >
-                    Primary/Secondary Loop
-                  </InputLabel>
-                  <Select
-                    value={
-                      hvacParameters.primarySecondaryLoop ? "true" : "false"
-                    }
-                    onChange={(e) =>
-                      handleHVACParameterChange("primarySecondaryLoop")(
-                        e,
-                        e.target.value === "true"
-                      )
-                    }
-                    disabled={
-                      (isSimulationRunning && !isSimulationPaused) ||
-                      hasInvalidFields
-                    }
-                  >
-                    <MenuItem value="true">True</MenuItem>
-                    <MenuItem value="false">False</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-            </Grid>
-          </Paper>
-        </Grid>
-
+        {/* {Simulation Model} */}
         {isSimulationRunning && !isSimulationPaused && (
-          <Grid item xs={12}>
-            <Paper
-              sx={{
-                p: 4,
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                background: alpha(theme.palette.background.paper, 0.8),
-                backdropFilter: "blur(10px)",
-                borderRadius: 2,
-                border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-              }}
-            >
-              <ChilledWaterSystemModel
-                roomParameters={roomParameters}
-                hvacParameters={hvacParameters}
-                systemStatus={systemStatus}
-                isSimulationRunning={isSimulationRunning}
-              />
-            </Paper>
-          </Grid>
+          <div className="flex justify-center items-center mt-8 text-primary">
+            <ChilledWaterSystemModel
+              roomParameters={roomParameters}
+              hvacParameters={hvacParameters}
+              systemStatus={systemStatus}
+              isSimulationRunning={isSimulationRunning}
+            />
+          </div>
         )}
 
-        <Grid item xs={12}>
-          <Paper
-            sx={{
-              p: 4,
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              background: alpha(theme.palette.background.paper, 0.8),
-              backdropFilter: "blur(10px)",
-              borderRadius: 2,
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-            }}
-          >
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                flexDirection: "column",
-                gap: 2,
-              }}
-            >
-              <Grid item xs={12} container>
-                <Button
-                  variant="contained"
-                  size="large"
-                  color={isSimulationRunning ? "error" : "primary"}
-                  startIcon={
-                    isSimulationRunning && !isSimulationPaused ? (
-                      <CircularProgress size={24} color="inherit" />
-                    ) : null
-                  }
-                  disabled={hasInvalidFields}
-                  onClick={async () => {
-                    try {
-                      const action = isSimulationRunning
-                        ? isSimulationPaused
-                          ? "resume"
-                          : "pause"
-                        : "start";
+        {/* {Control Panels} */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+          {/* Room Parameters Card */}
+          <Card className="bg-background">
+            <CardHeader>
+              <CardTitle>Room Parameters</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="room-length">Length (m)</Label>
+                  <Input
+                    id="room-length"
+                    type="number"
+                    value={Number(roomParameters.length)}
+                    onChange={(e) =>
+                      handleRoomParameterChange("length")(
+                        e,
+                        sanitizeNumericInput(e.target.value || 0)
+                      )
+                    }
+                    className={`${
+                      invalidFields.length ? "border-destructive" : ""
+                    }`}
+                    min="1"
+                    step="0.1"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      (hasInvalidFields && !invalidFields.length)
+                    }
+                  />
+                  {invalidFields.length && (
+                    <p className="text-sm text-destructive">
+                      Length cannot be zero or negative
+                    </p>
+                  )}
+                </div>
 
-                      if (action === "start") {
-                        console.log("Starting simulation, creating session...");
-                        const sessionData = await createSession();
-                        if (!sessionData) {
-                          console.error(
-                            "Session creation failed, cannot start simulation"
-                          );
-                          setSessionError(
-                            "Failed to create session. Please try again."
-                          );
-                          return; // Don't proceed if session creation failed
-                        }
-                        console.log(
-                          "Session created successfully:",
-                          sessionData
+                <div className="space-y-2">
+                  <Label htmlFor="room-breadth">Width (m)</Label>
+                  <Input
+                    id="room-breadth"
+                    type="number"
+                    value={Number(roomParameters.breadth)}
+                    onChange={(e) =>
+                      handleRoomParameterChange("breadth")(
+                        e,
+                        sanitizeNumericInput(e.target.value || 0)
+                      )
+                    }
+                    className={
+                      invalidFields.breadth ? "border-destructive" : ""
+                    }
+                    min="1"
+                    step="0.1"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      (hasInvalidFields && !invalidFields.breadth)
+                    }
+                  />
+                  {invalidFields.breadth && (
+                    <p className="text-sm text-destructive">
+                      Width cannot be zero or negative
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="room-height">Height (m)</Label>
+                  <Input
+                    id="room-height"
+                    type="number"
+                    value={Number(roomParameters.height)}
+                    onChange={(e) =>
+                      handleRoomParameterChange("height")(
+                        e,
+                        sanitizeNumericInput(e.target.value || 0)
+                      )
+                    }
+                    className={invalidFields.height ? "border-destructive" : ""}
+                    min="1"
+                    step="0.1"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      (hasInvalidFields && !invalidFields.height)
+                    }
+                  />
+                  {invalidFields.height && (
+                    <p className="text-sm text-destructive">
+                      Height cannot be zero or negative
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="num-people">No. of People</Label>
+                  <Input
+                    id="num-people"
+                    type="number"
+                    value={Number(roomParameters.numPeople)}
+                    onChange={(e) =>
+                      handleRoomParameterChange("numPeople")(
+                        e,
+                        sanitizeNumericInput(e.target.value || 0)
+                      )
+                    }
+                    min="0"
+                    step="1"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="room-mode">Mode</Label>
+                  <Select
+                    value={roomParameters.mode}
+                    onValueChange={(value) => {
+                      handleRoomParameterChange("mode")(null, value);
+                    }}
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  >
+                    <SelectTrigger id="room-mode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="cooling">Cooling</SelectItem>
+                        <SelectItem value="heating">Heating</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="wall-insulation">Wall Insulation Level</Label>
+                  <Select
+                    value={roomParameters.wallInsulation}
+                    onValueChange={(value) =>
+                      handleRoomParameterChange("wallInsulation")(null, value)
+                    }
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  >
+                    <SelectTrigger id="wall-insulation">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="col-span-1 sm:col-span-2 space-y-2">
+                  <div className="flex justify-between">
+                    <Label htmlFor="current-temperature">
+                      Current Room Temperature:{" "}
+                    </Label>
+                    <span>{roomParameters.currentTemp}°C</span>
+                  </div>
+                  <Slider
+                    id="current-temperature"
+                    min={10}
+                    max={40}
+                    step={0.5}
+                    value={[Number(roomParameters.currentTemp)]}
+                    onValueChange={(values) => {
+                      if (values && values.length > 0) {
+                        handleRoomParameterChange("currentTemp")(
+                          null,
+                          values[0]
                         );
-                        setCurrentSession(sessionData);
                       }
+                    }}
+                    className="relative h-4"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  />
+                </div>
 
-                      const message = {
-                        type: "simulation_control",
-                        data: { action },
-                      };
-
-                      console.log("Sending WebSocket message:", message);
-
-                      ws?.send(JSON.stringify(message));
-
-                      if (action === "start") {
-                        dispatch(setSimulationStatus(true));
-                        dispatch(setSimulationPaused(false));
-                      } else if (action === "pause") {
-                        dispatch(setSimulationPaused(true));
-                      } else if (action === "resume") {
-                        dispatch(setSimulationPaused(false));
+                <div className="col-span-1 sm:col-span-2 space-y-2">
+                  <div className="flex justify-between">
+                    <Label htmlFor="target-temperature">
+                      Target Temperature:{" "}
+                    </Label>
+                    <span>{roomParameters.targetTemp}°C</span>
+                  </div>
+                  <Slider
+                    id="target-temperature"
+                    min={16}
+                    max={30}
+                    step={0.5}
+                    value={[Number(roomParameters.targetTemp)]}
+                    onValueChange={(values) => {
+                      if (values && values.length > 0) {
+                        handleRoomParameterChange("targetTemp")(
+                          null,
+                          values[0]
+                        );
                       }
-                    } catch (error) {
-                      console.error("Error controlling simulation:", error);
-                      setSessionError(
-                        error.message ||
-                          "An error occurred while controlling the simulation"
+                    }}
+                    className="relative h-4"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  />
+                </div>
+
+                <div className="col-span-1 sm:col-span-2 space-y-2">
+                  <div className="flex items-center w-full">
+                    <Label
+                      htmlFor="external-temperature"
+                      className="whitespace-nowrap mr-2"
+                    >
+                      External Temperature:{" "}
+                    </Label>
+                    <div className="flex justify-end w-full items-center">
+                      <span>{roomParameters.externalTemp}°C</span>
+                      {/* WeatherIntegration component */}
+                      <WeatherIntegration
+                        systemType={SYSTEM_TYPE}
+                        websocket={ws}
+                        disabled={
+                          (isSimulationRunning && !isSimulationPaused) ||
+                          hasInvalidFields
+                        }
+                        currentTemp={roomParameters.externalTemp}
+                        onError={handleWeatherError}
+                        onSuccess={handleWeatherSuccess}
+                        onWeatherFetch={() => {
+                          toast.loading("Fetching weather data...", {
+                            duration: 2000,
+                            id: "weather-loading",
+                          });
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <Slider
+                    id="external-temperature"
+                    value={[Number(roomParameters.externalTemp)]}
+                    min={-10}
+                    max={45}
+                    step={0.5}
+                    onValueChange={(values) => {
+                      if (values && values.length > 0) {
+                        handleRoomParameterChange("externalTemp")(
+                          null,
+                          values[0]
+                        );
+                      }
+                    }}
+                    className="relative h-4"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  />
+                </div>
+
+                <div className="col-span-1 sm:col-span-2 space-y-2">
+                  <div className="flex justify-between">
+                    <Label htmlFor="fan-coil-units">Fan Coil Units: </Label>
+                    <span>{roomParameters.fanCoilUnits || 1}</span>
+                  </div>
+                  <Slider
+                    id="fan-coil-units"
+                    min={1}
+                    max={8}
+                    step={1}
+                    value={[Number(roomParameters.fanCoilUnits)]}
+                    onValueChange={(values) => {
+                      if (values && values.length > 0) {
+                        handleRoomParameterChange("fanCoilUnits")(
+                          null,
+                          values[0]
+                        );
+                      }
+                    }}
+                    className="relative h-4"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* HVAC Parameters Card */}
+          <Card className="bg-background">
+            <CardHeader>
+              <CardTitle>HVAC Parameters</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label htmlFor="power">Power: </Label>
+                    <span>{hvacParameters.power}kW</span>
+                  </div>
+                  <Slider
+                    id="power"
+                    min={1}
+                    max={10}
+                    step={0.5}
+                    value={[Number(hvacParameters.power)]}
+                    onValueChange={(values) => {
+                      if (values && values.length > 0) {
+                        handleHVACParameterChange("power")(null, values[0]);
+                      }
+                    }}
+                    className="relative h-4"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label htmlFor="airflow-rate">Airflow Rate: </Label>
+                    <span>{hvacParameters.airFlowRate}m³/s</span>
+                  </div>
+                  <Slider
+                    id="airflow-rate"
+                    min={0.1}
+                    max={2.0}
+                    step={0.1}
+                    value={[Number(hvacParameters.airFlowRate)]}
+                    onValueChange={(values) => {
+                      if (values && values.length > 0) {
+                        handleHVACParameterChange("airFlowRate")(
+                          null,
+                          values[0]
+                        );
+                      }
+                    }}
+                    className="relative h-4"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label htmlFor="fan-speed">Fan Speed: </Label>
+                    <span>{hvacParameters.fanSpeed}%</span>
+                  </div>
+                  <Slider
+                    id="fan-speed"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={[Number(hvacParameters.fanSpeed)]}
+                    onValueChange={(values) => {
+                      if (values && values.length > 0) {
+                        handleHVACParameterChange("fanSpeed")(null, values[0]);
+                      }
+                    }}
+                    className="relative h-4"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label htmlFor="water-flow-rate">Water Flow Rate: </Label>
+                    <span>{hvacParameters.chilledWaterFlowRate}L/s</span>
+                  </div>
+                  <Slider
+                    id="water-flow-rate"
+                    min={0.1}
+                    max={5.0}
+                    step={0.1}
+                    value={[Number(hvacParameters.chilledWaterFlowRate)]}
+                    onValueChange={(values) => {
+                      if (values && values.length > 0) {
+                        handleHVACParameterChange("chilledWaterFlowRate")(
+                          null,
+                          values[0]
+                        );
+                      }
+                    }}
+                    className="relative h-4"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label htmlFor="chilled-water-supply-temp">
+                      Chilled Water Supply Temperature:{" "}
+                    </Label>
+                    <span>{hvacParameters.chilledWaterSupplyTemp}°C</span>
+                  </div>
+                  <Slider
+                    id="chilled-water-supply-temp"
+                    min={4.0}
+                    max={15.0}
+                    step={0.5}
+                    value={[Number(hvacParameters.chilledWaterSupplyTemp)]}
+                    onValueChange={(values) => {
+                      if (values && values.length > 0) {
+                        handleHVACParameterChange("chilledWaterSupplyTemp")(
+                          null,
+                          values[0]
+                        );
+                      }
+                    }}
+                    className="relative h-4"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label htmlFor="chilled-water-return-temp">
+                      Chilled Water Return Temperature:{" "}
+                    </Label>
+                    <span>{hvacParameters.chilledWaterReturnTemp}°C</span>
+                  </div>
+                  <Slider
+                    id="chilled-water-return-temp"
+                    min={8.0}
+                    max={20.0}
+                    step={0.5}
+                    value={[Number(hvacParameters.chilledWaterReturnTemp)]}
+                    onValueChange={(values) => {
+                      if (values && values.length > 0) {
+                        handleHVACParameterChange("chilledWaterReturnTemp")(
+                          null,
+                          values[0]
+                        );
+                      }
+                    }}
+                    className="relative h-4"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label htmlFor="pump-power">Pump Power: </Label>
+                    <span>{hvacParameters.pumpPower}kW</span>
+                  </div>
+                  <Slider
+                    id="pump-power"
+                    min={0.2}
+                    max={5.0}
+                    step={0.1}
+                    value={[Number(hvacParameters.pumpPower)]}
+                    onValueChange={(values) => {
+                      if (values && values.length > 0) {
+                        handleHVACParameterChange("pumpPower")(null, values[0]);
+                      }
+                    }}
+                    className="relative h-4"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label htmlFor="glycol-percentage">
+                      Glycol Percentage:{" "}
+                    </Label>
+                    <span>{hvacParameters.glycolPercentage}%</span>
+                  </div>
+                  <Slider
+                    id="glycol-percentage"
+                    min={0}
+                    max={50}
+                    step={5}
+                    value={[Number(hvacParameters.glycolPercentage)]}
+                    onValueChange={(values) => {
+                      if (values && values.length > 0) {
+                        handleHVACParameterChange("glycolPercentage")(
+                          null,
+                          values[0]
+                        );
+                      }
+                    }}
+                    className="relative h-4"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label htmlFor="heat-exchanger-efficiency">
+                      Heat Exchanger Efficiency:{" "}
+                    </Label>
+                    <span>
+                      {(hvacParameters.heatExchangerEfficiency * 100).toFixed(
+                        0
+                      )}
+                      %
+                    </span>{" "}
+                  </div>
+                  <Slider
+                    id="heat-exchanger-efficiency"
+                    min={50}
+                    max={98}
+                    step={1}
+                    value={[
+                      Number(hvacParameters.heatExchangerEfficiency * 100),
+                    ]}
+                    onValueChange={(values) => {
+                      if (values && values.length > 0) {
+                        handleHVACParameterChange("heatExchangerEfficiency")(
+                          null,
+                          values[0] / 100
+                        );
+                      }
+                    }}
+                    className="relative h-4"
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="primary-secondary-loop">
+                    Primary/Secondary Loop
+                  </Label>
+                  <Select
+                    value={String(hvacParameters?.primarySecondaryLoop)}
+                    onValueChange={(value) =>
+                      handleHVACParameterChange("primarySecondaryLoop")(
+                        null,
+                        value === "true"
+                      )
+                    }
+                    disabled={
+                      (isSimulationRunning && !isSimulationPaused) ||
+                      hasInvalidFields
+                    }
+                  >
+                    <SelectTrigger id="primary-secondary-loop">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="false">False</SelectItem>
+                      <SelectItem value="true">True</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {showFailureBox && !isSimulationRunning && !isSimulationPaused && (
+          <DraggableBox
+            data={
+              <div className="text-sm">
+                {failureData ? (
+                  <div className="space-y-2">
+                    <div className="p-2 border-input rounded-sm dark:bg-black/20 bg-black/10">
+                      <p className="font-medium">Current Issue:</p>
+                      <p className="text-zinc-900 dark:text-yellow-300 font-bold">
+                        {failureData.message}
+                      </p>
+                      <p
+                        className={`text-xs mt-1 ${
+                          getAlertSeverity(failureData.severity) === "high"
+                            ? "text-red-500"
+                            : getAlertSeverity(failureData.severity) ===
+                              "medium"
+                            ? "text-yellow-300"
+                            : "text-primary"
+                        }`}
+                      >
+                        Severity: {failureData.severity}
+                      </p>
+                      <p className="text-xs">
+                        Solution: {failureData.solution}
+                      </p>
+                    </div>
+
+                    {failureQueue.length > 0 && (
+                      <div className="mt-2">
+                        <p className="font-medium mb-1">
+                          Pending Issues ({failureQueue.length}):
+                        </p>
+                        {failureQueue.map((failure, index) => (
+                          <p
+                            key={index}
+                            className="text-xs dark:text-gray-300 text:primary opacity-80"
+                          >
+                            {failure.message}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-2 border border-green-300/10 rounded dark:bg-black/20 bg-black/10">
+                    <p className="dark:text-green-300 text-stone-700">
+                      No system failures detected.
+                    </p>
+                    <p className="text-xs dark:text-green-200/70 text-stone-600 mt-1">
+                      System is operating normally.
+                    </p>
+                  </div>
+                )}
+              </div>
+            }
+            onClose={toggleFailureBox}
+          />
+        )}
+
+        {/* Simulation Controls */}
+        <div className="flex justify-center mt-8 space-x-4">
+          <Button
+            onClick={async () => {
+              try {
+                const action = isSimulationRunning
+                  ? isSimulationPaused
+                    ? "resume"
+                    : "pause"
+                  : "start";
+
+                let loadingToast;
+
+                if (action === "start") {
+                  loadingToast = toast.loading("Starting simulation...", {
+                    duration: Infinity,
+                  });
+                  console.log("Starting simulation, creating session...");
+                  const sessionData = await createSession();
+                  if (!sessionData) {
+                    toast.dismiss(loadingToast);
+                    toast.error(
+                      "Failed to start simulation. Session creation failed.",
+                      {
+                        duration: 4000,
+                      }
+                    );
+                    console.error(
+                      "Session creation failed, cannot start simulation"
+                    );
+                    setSessionError(
+                      "Failed to create session. Please try again."
+                    );
+                    return; // Don't proceed if session creation failed
+                  }
+                  console.log("Session created successfully:", sessionData);
+                  setCurrentSession(sessionData);
+                }
+
+                const message = {
+                  type: "simulation_control",
+                  data: { action },
+                };
+
+                console.log("Sending WebSocket message:", message);
+
+                ws?.send(JSON.stringify(message));
+
+                toast.dismiss(loadingToast);
+                toast.success("Simulation started successfully!", {
+                  duration: 3000,
+                });
+
+                if (action === "start") {
+                  dispatch(setSimulationStatus(true));
+                  dispatch(setSimulationPaused(false));
+                } else if (action === "pause") {
+                  dispatch(setSimulationPaused(true));
+                  toast.info("Simulation paused", { duration: 2000 });
+                } else if (action === "resume") {
+                  dispatch(setSimulationPaused(false));
+                  toast.info("Simulation resumed", { duration: 2000 });
+                }
+              } catch (error) {
+                console.error("Error controlling simulation:", error);
+                toast.error(
+                  `Failed to ${
+                    isSimulationRunning ? "control" : "start"
+                  } simulation: ${error.message}`,
+                  {
+                    duration: 5000,
+                  }
+                );
+                setSessionError(
+                  error.message ||
+                    "An error occurred while controlling the simulation"
+                );
+              }
+            }}
+            variant={isSimulationRunning ? "destructive" : "success"}
+            size="xlg"
+            disabled={hasInvalidFields}
+            className="min-w-[120px] font-bold transition-all duration-400"
+          >
+            {isSimulationRunning
+              ? isSimulationPaused
+                ? "Resume Simulation"
+                : "Pause Simulation"
+              : "Start Simulation"}
+          </Button>
+          {isSimulationRunning ? (
+            <Button
+              onClick={async () => {
+                try {
+                  toast.loading("Stopping simulation", {
+                    duration: Infinity,
+                    id: "stop-simulation",
+                  });
+
+                  const message = {
+                    type: "simulation_control",
+                    data: {
+                      action: "stop",
+                    },
+                  };
+
+                  const activeUserId = sessionStorage.getItem("activeUserId");
+                  console.log(
+                    "Active user ID for stopping simulation:",
+                    activeUserId
+                  );
+
+                  if (!activeUserId) {
+                    toast.dismiss("stop-simulation");
+                    toast.error("Error stopping simulation.", {
+                      duration: 4000,
+                    });
+                    throw new Error("No active user found");
+                  }
+
+                  const user = JSON.parse(
+                    sessionStorage.getItem(`user_${activeUserId}`)
+                  );
+                  console.log("User data for stopping simulation:", user);
+
+                  // Get current session from sessionStorage
+                  const sessionKey = `${user.id}_session`;
+                  const sessionData = sessionStorage.getItem(sessionKey);
+                  console.log("Session data from storage:", sessionData);
+
+                  if (sessionData) {
+                    const currentSession = JSON.parse(sessionData);
+                    console.log(
+                      "Current session for stopping simulation:",
+                      currentSession
+                    );
+
+                    // Calculate if simulation was successful (target temperature reached)
+                    const isSuccess =
+                      Math.abs(
+                        systemStatus.roomTemperature - roomParameters.targetTemp
+                      ) <= 0.5;
+
+                    console.log("Simulation success status:", isSuccess);
+
+                    try {
+                      // Save simulation data
+                      console.log("Saving simulation data...");
+                      await saveSimulationData(
+                        currentSession.session_id,
+                        isSuccess
+                      );
+
+                      // Update session status
+                      console.log("Updating session status...");
+                      await updateSessionStatus(
+                        currentSession.session_id,
+                        false
+                      );
+
+                      // Clear session from sessionStorage
+                      console.log("Removing session from storage...");
+                      sessionStorage.removeItem(sessionKey);
+                      setCurrentSession(null);
+                      console.log("Session cleared successfully");
+                    } catch (saveError) {
+                      console.error(
+                        "Error during simulation data saving:",
+                        saveError
                       );
                     }
-                  }}
-                  sx={{
-                    px: 6,
-                    py: 2,
-                    fontSize: "1.2rem",
-                    fontWeight: "bold",
-                    borderRadius: 2,
-                    textTransform: "none",
-                    boxShadow: isSimulationRunning
-                      ? `0 0 20px ${alpha(theme.palette.error.main, 0.4)}`
-                      : `0 0 20px ${alpha(theme.palette.primary.main, 0.4)}`,
+                  } else {
+                    console.warn(
+                      "No active session found when stopping simulation"
+                    );
+                  }
 
-                    opacity: hasInvalidFields ? 0.6 : 1,
-                  }}
-                >
-                  {isSimulationRunning
-                    ? isSimulationPaused
-                      ? "Resume Simulation"
-                      : "Pause Simulation"
-                    : "Start Simulation"}
-                </Button>
-                {isSimulationRunning ? (
-                  <Button
-                    variant="contained"
-                    size="large"
-                    color="error"
-                    onClick={async () => {
-                      try {
-                        const message = {
-                          type: "simulation_control",
-                          data: {
-                            action: "stop",
-                          },
-                        };
-
-                        const activeUserId =
-                          sessionStorage.getItem("activeUserId");
-                        console.log(
-                          "Active user ID for stopping simulation:",
-                          activeUserId
-                        );
-
-                        if (!activeUserId) {
-                          throw new Error("No active user found");
-                        }
-
-                        const user = JSON.parse(
-                          sessionStorage.getItem(`user_${activeUserId}`)
-                        );
-                        console.log("User data for stopping simulation:", user);
-
-                        // Get current session from sessionStorage
-                        const sessionKey = `${user.id}_session`;
-                        const sessionData = sessionStorage.getItem(sessionKey);
-                        console.log("Session data from storage:", sessionData);
-
-                        if (sessionData) {
-                          const currentSession = JSON.parse(sessionData);
-                          console.log(
-                            "Current session for stopping simulation:",
-                            currentSession
-                          );
-
-                          // Calculate if simulation was successful (target temperature reached)
-                          const isSuccess =
-                            Math.abs(
-                              systemStatus.roomTemperature -
-                                roomParameters.targetTemp
-                            ) <= 0.5;
-
-                          console.log("Simulation success status:", isSuccess);
-
-                          try {
-                            // Save simulation data
-                            console.log("Saving simulation data...");
-                            await saveSimulationData(
-                              currentSession.session_id,
-                              isSuccess
-                            );
-
-                            // Update session status
-                            console.log("Updating session status...");
-                            await updateSessionStatus(
-                              currentSession.session_id,
-                              false
-                            );
-
-                            // Clear session from sessionStorage
-                            console.log("Removing session from storage...");
-                            sessionStorage.removeItem(sessionKey);
-                            setCurrentSession(null);
-                            console.log("Session cleared successfully");
-                          } catch (saveError) {
-                            console.error(
-                              "Error during simulation data saving:",
-                              saveError
-                            );
-                          }
-                        } else {
-                          console.warn(
-                            "No active session found when stopping simulation"
-                          );
-                        }
-
-                        ws?.send(JSON.stringify(message));
-                        dispatch(setSimulationStatus(false));
-                        dispatch(setSimulationPaused(false));
-                      } catch (error) {
-                        console.error("Error stopping simulation:", error);
-                        setSessionError(error.message);
-                      }
-                    }}
-                    sx={{
-                      px: 6,
-                      py: 2,
-                      fontSize: "1.2rem",
-                      fontWeight: "bold",
-                      borderRadius: 2,
-                      textTransform: "none",
-                      marginLeft: 2,
-                      boxShadow: `0 0 20px ${alpha(
-                        theme.palette.error.main,
-                        0.4
-                      )}`,
-                    }}
-                  >
-                    Stop Simulation
-                  </Button>
-                ) : (
-                  ""
-                )}
-              </Grid>
-              {countdownTime > 0 && (
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 1,
-                    p: 2,
-                    borderRadius: 2,
-                    bgcolor: alpha(theme.palette.background.paper, 0.8),
-                    border: `1px solid ${alpha(
-                      theme.palette.primary.main,
-                      0.1
-                    )}`,
-                  }}
-                >
-                  <Typography
-                    variant="h6"
-                    sx={{ color: theme.palette.text.secondary }}
-                  >
-                    Time to Target:
-                  </Typography>
-                  <Typography
-                    variant="h6"
-                    sx={{
-                      color: theme.palette.primary.main,
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {Math.floor(countdownTime / 60)}:
-                    {String(Math.floor(countdownTime % 60)).padStart(2, "0")}
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          </Paper>
-        </Grid>
-      </Grid>
-      <Snackbar
-        open={failureAlert}
-        autoHideDuration={null}
-        onClose={() => {
-          setFailureAlert(false);
-
-          // Check if there are more failures to show
-          if (failureQueue && failureQueue.length > 0) {
-            // Show the next failure immediately (no need for timeout)
-            const nextFailure = failureQueue[0];
-            const remainingFailures = failureQueue.slice(1);
-
-            setFailureData(nextFailure);
-            setFailureQueue(remainingFailures);
-            setFailureAlert(true);
-          }
-        }}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        sx={{
-          mb: 4, // Add margin to bottom to avoid taskbar
-          "& .MuiPaper-root": {
-            opacity: 0.9, // Lower opacity
-            maxWidth: 320, // Control width
-          },
-        }}
-      >
-        <Alert
-          severity={
-            failureData ? getAlertSeverity(failureData.severity) : "error"
-          }
-          variant="filled"
-          onClose={() => {
-            // Don't call setFailureAlert here, let the Snackbar onClose handle it
-            // This prevents double-closing that could skip alerts
-          }}
-          action={
-            <Button
-              color="inherit"
-              size="small"
-              onClick={() => {
-                // Use the same logic as Snackbar onClose
-                setFailureAlert(false);
-
-                // Check if there are more failures to show
-                if (failureQueue && failureQueue.length > 0) {
-                  // Show the next failure immediately
-                  const nextFailure = failureQueue[0];
-                  const remainingFailures = failureQueue.slice(1);
-
-                  setFailureData(nextFailure);
-                  setFailureQueue(remainingFailures);
-                  setFailureAlert(true);
+                  ws?.send(JSON.stringify(message));
+                  dispatch(setSimulationStatus(false));
+                  dispatch(setSimulationPaused(false));
+                  toast.dismiss("stop-simulation");
+                  toast.success("Simulation stopped.", {
+                    duration: 4000,
+                  });
+                } catch (error) {
+                  console.error("Error stopping simulation:", error);
+                  setSessionError(error.message);
                 }
               }}
+              disabled={!isSimulationRunning}
+              variant="destructive"
+              className="min-w-[120px] font-bold"
+              size="xlg"
             >
-              DISMISS
+              Stop Simulation
             </Button>
-          }
-          sx={{
-            "& .MuiAlert-message": {
-              fontSize: "0.9rem",
-            },
-          }}
-        >
-          <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 0.5 }}>
-            System {failureData?.severity || "Error"}
-          </Typography>
-          <Typography variant="body2" sx={{ mb: 1, fontSize: "0.85rem" }}>
-            {failureData?.message || "Unknown system error occurred"}
-          </Typography>
-          {failureData?.solution && (
-            <Typography
-              variant="body2"
-              sx={{
-                fontStyle: "italic",
-                fontSize: "0.8rem",
-                backgroundColor: alpha(theme.palette.background.paper, 0.2),
-                p: 0.5,
-                borderRadius: 1,
-              }}
-            >
-              Suggested action: {failureData.solution}
-            </Typography>
-          )}
-        </Alert>
-      </Snackbar>
-      <Snackbar
-        open={invalidParameterOpen}
-        autoHideDuration={5000}
-        onClose={() => setInvalidParameterOpen(false)}
-        anchorOrigin={{ vertical: "top", horizontal: "center" }}
-      >
-        <Alert
-          severity="error"
-          variant="filled"
-          onClose={() => setInvalidParameterOpen(false)}
-        >
-          {invalidParameterMessage}
-        </Alert>
-      </Snackbar>
-      <Snackbar
-        open={targetReachAlert}
-        autoHideDuration={6000}
-        onClose={() => setTargetReachAlert(false)}
-        anchorOrigin={{ vertical: "top", horizontal: "center" }}
-      >
-        <Alert
-          severity="success"
-          variant="filled"
-          onClose={() => setTargetReachAlert(false)}
-        >
-          Target temperature reached! Simulation successful.
-        </Alert>
-      </Snackbar>
-      <Snackbar
-        open={weatherSuccessOpen}
-        autoHideDuration={5000}
-        onClose={() => setWeatherSuccessOpen(false)}
-        anchorOrigin={{ vertical: "top", horizontal: "center" }}
-      >
-        <Alert
-          severity="success"
-          variant="filled"
-          onClose={() => setWeatherSuccessOpen(false)}
-        >
-          {weatherSuccessMessage}
-        </Alert>
-      </Snackbar>
-      <Snackbar
-        open={weatherErrorOpen}
-        autoHideDuration={6000}
-        onClose={() => setWeatherErrorOpen(false)}
-        anchorOrigin={{ vertical: "top", horizontal: "center" }}
-      >
-        <Alert
-          severity="error"
-          variant="filled"
-          onClose={() => setWeatherErrorOpen(false)}
-        >
-          {weatherErrorMessage ||
-            "Error fetching weather data. Please try again."}
-        </Alert>
-      </Snackbar>
-    </Box>
+          ) : null}
+        </div>
+        {isSimulationRunning && countdownTime > 0 && (
+          <div className="mt-4">
+            <p className="text-center text-sm mt-2 text-primary">
+              Time to target: {Math.floor(countdownTime / 60)}:
+              {String(Math.floor(countdownTime % 60)).padStart(2, "0")}
+            </p>
+          </div>
+        )}
+      </div>
+      <Toaster position="bottom-right" theme={theme} />
+    </div>
   );
 };
 

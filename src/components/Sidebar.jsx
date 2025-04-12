@@ -110,7 +110,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       <div
         className={`${
           isCollapsed ? "w-20" : "w-64"
-        } h-full flex flex-col transition-all duration-300 ease-in-out bg-gradient-to-b from-slate-800 to-slate-900 min-h-screen fixed left-0 top-0 z-40 pt-8 px-3 shadow-xl border-r border-gray-700`}
+        } h-full flex flex-col transition-all duration-300 ease-in-out bg-gradient-to-b from-slate-800 to-slate-900 min-h-screen fixed left-0 top-0 z-40 pt-8 px-3 shadow-xl`}
       >
         {/* Logo Section */}
         <div

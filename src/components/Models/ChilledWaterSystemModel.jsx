@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
-import { Box, Typography } from "@mui/material";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 const ChilledWaterSystemModel = ({
   roomParameters,
@@ -26,13 +27,57 @@ const ChilledWaterSystemModel = ({
   const [modelLoaded, setModelLoaded] = useState(false);
   const [cameraPosition, setCameraPosition] = useState({ x: 0, y: 10, z: 15 });
 
+  useEffect(() => {
+    // Function to update background based on theme
+    const updateSceneBackground = () => {
+      if (!sceneRef.current) return;
+
+      const root = document.getElementById("root");
+      const isDarkMode = root && root.classList.contains("dark");
+
+      // Use hex color value instead of OKLCH
+      sceneRef.current.background = new THREE.Color(
+        isDarkMode ? "#0a0a0a" : "white"
+      );
+    };
+
+    // Set up MutationObserver to detect theme changes
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === "class") {
+          updateSceneBackground();
+        }
+      });
+    });
+
+    const root = document.getElementById("root");
+
+    // Only observe if root exists
+    if (root) {
+      // Start observing the document element for class changes
+      observer.observe(root, { attributes: true });
+    }
+
+    // Initial background update
+    updateSceneBackground();
+
+    // Clean up observer on component unmount
+    return () => observer.disconnect();
+  }, []);
+
   // Initialize the scene
   useEffect(() => {
     if (!mountRef.current) return;
 
     // Create scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf5f5f5);
+
+    // Check if root element has dark class and set background accordingly
+    const root = document.getElementById("root");
+    const isDarkMode = root && root.classList.contains("dark");
+
+    // Use hex color value instead of OKLCH
+    scene.background = new THREE.Color(isDarkMode ? "#0a0a0a" : "white");
     sceneRef.current = scene;
 
     // Setup camera
@@ -1803,73 +1848,69 @@ const ChilledWaterSystemModel = ({
   ]);
 
   return (
-    <Box position="relative" width="100%" height="500px">
-      <Box ref={mountRef} width="100%" height="100%" />
+    <Card className="relative w-full bg-background h-96 p-0 p-2">
+      {/* Main visualization area */}
+      <div ref={mountRef} className="w-full h-full" />
 
       {/* Status Overlay */}
-      <Box
-        position="absolute"
-        top={16}
-        left={16}
-        bgcolor="rgba(255,255,255,0.75)"
-        p={2}
-        borderRadius={1}
-        boxShadow={1}
-        zIndex={10}
-      >
-        <Typography variant="h6" fontWeight="bold">
-          {systemStatus?.roomTemperature?.toFixed(1) || "25.0"}°C
-        </Typography>
-        <Typography variant="body2">
-          Target: {roomParameters.targetTemp.toFixed(1)}°C
-        </Typography>
-        <Typography variant="body2">
-          Mode: {roomParameters.mode === "cooling" ? "Cooling" : "Heating"}
-        </Typography>
-        <Typography variant="body2">Fan: {hvacParameters.fanSpeed}%</Typography>
-      </Box>
+      <Card className="absolute top-4 left-4 shadow-md z-10 flex justify-center text-center backdrop-blur-sm bg-white/1">
+        <CardContent className="px-4">
+          <Badge
+            variant={
+              roomParameters.mode === "cooling" ? "default" : "destructive"
+            }
+            className="flex justify-center mb-1 w-full"
+          >
+            {roomParameters.mode === "cooling" ? "Cooling" : "Heating"}
+          </Badge>
+          <h3 className="text-xl font-bold mb-2">
+            {systemStatus?.roomTemperature?.toFixed(1) || "25.0"}°C
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Target: {roomParameters.targetTemp.toFixed(1)}°C
+          </p>
+          <div className="flex justify-center items-center gap-2 mt-1">
+            <p className="text-sm text-muted-foreground">
+              Fan Speed: {hvacParameters.fanSpeed}%
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Temperature Color Legend */}
-      <Box
-        position="absolute"
-        bottom={16}
-        right={16}
-        bgcolor="rgba(255,255,255,0.75)"
-        p={2}
-        borderRadius={1}
-        boxShadow={1}
-        zIndex={10}
-      >
-        <Typography variant="body2" fontWeight="bold" mb={1}>
-          Temperature
-        </Typography>
-        <Box
-          sx={{
-            width: "100%",
-            height: "16px",
-            background:
-              roomParameters.mode === "cooling"
-                ? "linear-gradient(to right, #0066ff, #66ff66, #ff6666)"
-                : "linear-gradient(to right, #ff6666, #66ff66, #0066ff)",
-            borderRadius: 1,
-          }}
-        />
-        <Box display="flex" justifyContent="space-between">
-          <Typography variant="caption">
-            {roomParameters.mode === "cooling"
-              ? (roomParameters.targetTemp - 5).toFixed(1)
-              : (roomParameters.targetTemp + 5).toFixed(1)}
-            °C
-          </Typography>
-          <Typography variant="caption">
-            {roomParameters.mode === "cooling"
-              ? (roomParameters.externalTemp + 5).toFixed(1)
-              : (roomParameters.externalTemp - 5).toFixed(1)}
-            °C
-          </Typography>
-        </Box>
-      </Box>
-    </Box>
+      <Card className="absolute bottom-4 right-4 bg-white/1 backdrop-blur-sm shadow-md z-10 py-4 px-0">
+        <CardContent>
+          <h4 className="text-sm font-medium mb-2">Temperature</h4>
+
+          <div className="w-full h-4 rounded-sm overflow-hidden">
+            <div
+              className="h-full w-full"
+              style={{
+                background:
+                  roomParameters.mode === "cooling"
+                    ? "linear-gradient(to right, #0066ff, #66ff66, #ff6666)"
+                    : "linear-gradient(to right, #ff6666, #66ff66, #0066ff)",
+              }}
+            />
+          </div>
+
+          <div className="flex justify-between mt-1">
+            <span className="text-xs">
+              {roomParameters.mode === "cooling"
+                ? (roomParameters.targetTemp - 5).toFixed(1)
+                : (roomParameters.targetTemp + 5).toFixed(1)}
+              °C
+            </span>
+            <span className="text-xs">
+              {roomParameters.mode === "cooling"
+                ? (roomParameters.externalTemp + 5).toFixed(1)
+                : (roomParameters.externalTemp - 5).toFixed(1)}
+              °C
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+    </Card>
   );
 };
 

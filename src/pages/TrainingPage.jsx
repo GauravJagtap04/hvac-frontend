@@ -114,7 +114,11 @@ const TrainingPage = () => {
   }
   return (
     <div className="min-h-screen bg-gray-100">
-      <header className="bg-blue-100 dark:bg-gray-800 shadow-lg z-10">
+      <header
+        className={`bg-gray-800 text-background dark:text-primary fixed top-0 ${
+          isCollapsed ? "left-[80px]" : "left-[250px]"
+        } right-0 z-10 transition-all duration-300`}
+      >
         <div className="px-3 py-2 sm:p-4 flex items-center justify-between">
           <div className="flex items-center space-x-1 sm:space-x-2">
             <div className="flex items-center space-x-2 sm:space-x-4">
@@ -138,7 +142,7 @@ const TrainingPage = () => {
                 </svg>
               </button> */}
             </div>
-            <h1 className="text-base sm:text-xl font-semibold ml-1 sm:ml-3 text-gray-800 dark:text-white truncate">
+            <h1 className="text-base sm:text-xl font-semibold ml-1 sm:ml-3 text-background dark:text-primary truncate">
               Training
             </h1>
           </div>
@@ -149,7 +153,7 @@ const TrainingPage = () => {
         </div>
       </header>
       {activeTab === "modules" && (
-        <div className="bg-white border-b">
+        <div className="bg-white border-b mt-10 sm:mt-14 md:mt-14 shadow-sm">
           <div
             className={`transition-all duration-300 ${
               isCollapsed ? "max-w-8xl" : "max-w-7xl"

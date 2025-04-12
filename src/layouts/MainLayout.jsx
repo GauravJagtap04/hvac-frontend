@@ -8,7 +8,11 @@ const MainLayout = () => {
   return (
     <div className="flex">
       <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
-      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'ml-16' : 'ml-64'}`}>
+      <div
+        className={`flex-1 transition-all duration-300 ${
+          isCollapsed ? "ml-20" : "ml-64"
+        }`}
+      >
         <Outlet context={{ isCollapsed }} />
       </div>
     </div>

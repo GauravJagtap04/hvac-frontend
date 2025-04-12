@@ -1,10 +1,15 @@
 import React, { useState } from "react";
 import { useDispatch } from "react-redux";
-import { Button, CircularProgress, Box, Tooltip } from "@mui/material";
-import LocationOnIcon from "@mui/icons-material/LocationOn";
-// import { getCurrentLocationWeather } from "../../utilities/weatherService";
-import { getCurrentLocationWeather } from "@/utilities/WeatherService";
 import { updateRoomParameters } from "../store/store";
+import { getCurrentLocationWeather } from "@/utilities/WeatherService";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { MapPin, Loader2 } from "lucide-react";
 
 const WeatherIntegration = ({
   systemType,
@@ -14,15 +19,20 @@ const WeatherIntegration = ({
   onWeatherFetched,
   onError,
   onSuccess,
+  onWeatherFetch,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [location, setLocation] = useState(null);
   const dispatch = useDispatch();
 
   const fetchWeather = async () => {
+    setIsLoading(true);
     if (disabled) return;
 
-    setIsLoading(true);
+    if (onWeatherFetch) {
+      onWeatherFetch();
+    }
+
     try {
       const weatherData = await getCurrentLocationWeather();
 
@@ -43,7 +53,6 @@ const WeatherIntegration = ({
           })
         );
 
-        // Update weather location
         const locationString = `${weatherData.city}, ${weatherData.country}`;
         setLocation(locationString);
 
@@ -55,7 +64,6 @@ const WeatherIntegration = ({
           onSuccess(locationString, weatherData.temperature);
         }
 
-        // Callback for parent component
         if (onWeatherFetched) {
           onWeatherFetched(weatherData);
         }
@@ -75,20 +83,28 @@ const WeatherIntegration = ({
   };
 
   return (
-    <>
-      <Button
-        variant="outlined"
-        size="small"
-        startIcon={
-          isLoading ? <CircularProgress size={16} /> : <LocationOnIcon />
-        }
-        onClick={fetchWeather}
-        disabled={isLoading || disabled}
-        sx={{ ml: 2, height: 32 }}
-      >
-        {isLoading ? "Loading..." : "Get Local Weather"}
-      </Button>
-    </>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={fetchWeather}
+            disabled={isLoading || disabled}
+            className="ml-2 h-8 w-8 bg-background dark:bg-background"
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <MapPin className="h-4 w-4" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Get local weather</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 };
 

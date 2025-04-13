@@ -1,31 +1,57 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { supabase } from "../components/SupabaseClient";
+import Header from "@/components/Header";
 import { format } from "date-fns";
 import axios from "axios";
+
 import {
   LineChart,
   Line,
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   Legend,
   ResponsiveContainer,
 } from "recharts";
+
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
-  FormControl,
-  InputLabel,
   Select,
-  MenuItem,
-  Typography,
-} from "@mui/material";
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SelectGroup,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { Label } from "@/components/ui/label";
+
+import { ChevronDown, ChevronUp, Loader } from "lucide-react";
 
 const Dashboard = () => {
   const { isCollapsed } = useOutletContext();
   const [loading, setLoading] = useState(true);
   const [simulations, setSimulations] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [userName, setUserName] = useState("");
   const [sortConfig, setSortConfig] = useState({
     key: "created_at",
     direction: "desc",
@@ -36,12 +62,17 @@ const Dashboard = () => {
     highestPower: 0,
   });
   const [processedData, setProcessedData] = useState([]);
-  const [selectedType, setSelectedType] = useState("all"); // Add this state
+  const [selectedType, setSelectedType] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const itemsPerPage = 10;
 
   const processSimulationData = (simulationsData) => {
     const energyData = simulationsData.map((sim) => ({
       date: new Date(sim.created_at).toLocaleDateString(),
-      energy: sim.parameters.results.energyConsumption / 1000, // Convert to kW
+      energy: parseFloat(
+        (sim.parameters.results.energyConsumption / 1000).toFixed(2)
+      ),
       power: sim.parameters.hvac.power,
       type: sim.type,
     }));
@@ -56,6 +87,7 @@ const Dashboard = () => {
 
     setProcessedData(energyData);
   };
+
   const getCurrentLocation = () => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
@@ -68,6 +100,7 @@ const Dashboard = () => {
       }
     });
   };
+
   const fetchWeather = async () => {
     try {
       const position = await getCurrentLocation();
@@ -90,6 +123,32 @@ const Dashboard = () => {
       }
     }
   };
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const user = JSON.parse(localStorage.getItem("user")); // Parse the string into an object
+        console.log("User from localStorage:", user);
+        if (user && user.id) {
+          const { data, error } = await supabase
+            .from("users")
+            .select("name")
+            .eq("id", user.id)
+            .single();
+
+          if (error) throw error;
+          if (data) {
+            console.log("Username:", data.name);
+            setUserName(data.name);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+      }
+    };
+
+    fetchUserData();
+  }, []);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -137,6 +196,13 @@ const Dashboard = () => {
     return 0;
   });
 
+  const paginatedSimulations = sortedSimulations.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const totalPages = Math.ceil(sortedSimulations.length / itemsPerPage);
+
   useEffect(() => {
     if (sortedSimulations.length > 0) {
       processSimulationData(sortedSimulations);
@@ -151,373 +217,309 @@ const Dashboard = () => {
   };
 
   const StatCards = () => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-      <div className="bg-white rounded-xl shadow-lg p-6 transform transition-all duration-300 hover:scale-105">
-        <div className="flex items-center space-x-4">
-          <div className="p-3 bg-blue-100 rounded-lg">
-            <svg
-              className="w-6 h-6 text-blue-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M13 10V3L4 14h7v7l9-11h-7z"
-              />
-            </svg>
-          </div>
-          <div>
-            <div className="text-sm font-medium text-gray-500">
-              Highest Energy Consumption
-            </div>
-            <div className="text-2xl font-bold text-blue-600">
-              {energyStats.highestEnergy} kW
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="bg-white rounded-xl shadow-lg p-6 transform transition-all duration-300 hover:scale-105">
-        <div className="flex items-center space-x-4">
-          <div className="p-3 bg-green-100 rounded-lg">
-            <svg
-              className="w-6 h-6 text-green-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707"
-              />
-            </svg>
-          </div>
-          <div>
-            <div className="text-sm font-medium text-gray-500">
-              Highest Power Usage
-            </div>
-            <div className="text-2xl font-bold text-green-600">
-              {energyStats.highestPower} kW
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="bg-white rounded-xl shadow-lg p-6 transform transition-all duration-300 hover:scale-105">
-        <div className="flex items-center space-x-4">
-          <div className="p-3 bg-orange-100 rounded-lg">
-            <svg
-              className="w-6 h-6 text-orange-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707"
-              />
-            </svg>
-          </div>
-          <div>
-            <div className="text-sm font-medium text-gray-500">
-              Current External Temperature
-            </div>
-            <div className="text-2xl font-bold text-orange-600">
-              {weatherData ? `${weatherData.main.temp}°C` : "Loading..."}
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+      <Card className="w-full h-full min-w-[160px] bg-background">
+        <CardContent className="flex flex-col items-center p-6">
+          <CardTitle className="mt-4 text-muted-foreground">
+            Highest Energy Consumption
+          </CardTitle>
+          <span className="mt-2 mb-1 text-4xl font-bold text-primary">
+            {energyStats.highestEnergy}
+          </span>
+          <p className="text-sm text-muted-foreground">kW</p>
+        </CardContent>
+      </Card>
+
+      <Card className="w-full h-full min-w-[160px] bg-background">
+        <CardContent className="flex flex-col items-center p-6">
+          <CardTitle className="mt-4 text-muted-foreground">
+            Highest Power Usage
+          </CardTitle>
+          <span className="mt-2 mb-1 text-4xl font-bold text-primary">
+            {energyStats.highestPower}
+          </span>
+          <p className="text-sm text-muted-foreground">kW</p>
+        </CardContent>
+      </Card>
+
+      <Card className="w-full h-full min-w-[160px] bg-background">
+        <CardContent className="flex flex-col items-center p-6">
+          <CardTitle className="mt-4 text-muted-foreground">
+            Current External Temperature
+          </CardTitle>
+          <span className="mt-2 mb-1 text-4xl font-bold text-primary">
+            {weatherData ? weatherData.main.temp : "Loading..."}
+          </span>
+          <p className="text-sm text-muted-foreground">°C</p>
+        </CardContent>
+      </Card>
     </div>
   );
 
-  const EnergyGraph = ({ simulations }) => {
-    const data = processSimulationData(simulations);
-
-    return (
-      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">
-          Energy & Power Consumption
-        </h2>
-        <div className="h-96">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis yAxisId="left" />
-              <YAxis yAxisId="right" orientation="right" />
-              <Tooltip />
-              <Legend />
-              <Line
-                yAxisId="left"
-                type="monotone"
-                dataKey="energy"
-                stroke="#2563eb"
-                name="Energy (kW)"
-                dot={false}
-              />
-              <Line
-                yAxisId="right"
-                type="monotone"
-                dataKey="power"
-                stroke="#16a34a"
-                name="Power (kW)"
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    );
-  };
-  const goBack = () => {
-    navigate(-1);
-  };
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <header className="bg-blue-100 dark:bg-gray-800 shadow-lg z-10">
-        <div className="px-3 py-2 sm:p-4 flex items-center justify-between">
-          <div className="flex items-center space-x-1 sm:space-x-2">
-            <div className="flex items-center space-x-2 sm:space-x-4">
-              {/* <button
-                onClick={goBack}
-                className="p-1 sm:p-2 group rounded-full bg-transparent hover:bg-blue-500 dark:hover:bg-gray-700 focus:outline-none transition-colors"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500 group-hover:text-white dark:text-gray-300"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                  />
-                </svg>
-              </button> */}
-            </div>
-            <h1 className="text-base sm:text-xl font-semibold ml-1 sm:ml-3 text-gray-800 dark:text-white truncate">
-              Dashboard
-            </h1>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-background text-primary w-full max-w-full">
+      <Header isCollapsed={isCollapsed} name={`Hello, ${userName}`} />
 
       <main
-        className={`transition-all duration-300 ${
+        className={`relative transition-all duration-300 ${
           isCollapsed ? "max-w-8xl" : "max-w-7xl"
-        } mx-auto px-6 py-8`}
+        } mx-auto px-4 sm:px-6 py-8`}
       >
-        <div className="mb-8">
-          <StatCards />
-        </div>
-
-        <div className="mb-8">
-          <div className="bg-white rounded-xl shadow-lg p-6 transition-all duration-300 hover:shadow-xl">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">
-              Energy & Power Consumption
-            </h2>
-            <div className="h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={processedData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis
-                    yAxisId="left"
-                    label={{
-                      value: "Energy (kW)",
-                      angle: -90,
-                      position: "insideLeft",
-                    }}
-                  />
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    label={{
-                      value: "Power (kW)",
-                      angle: 90,
-                      position: "insideRight",
-                    }}
-                  />
-                  <Tooltip />
-                  <Legend />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="energy"
-                    stroke="#2563eb"
-                    name="Energy (kW)"
-                    dot={false}
-                  />
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="power"
-                    stroke="#16a34a"
-                    name="Power (kW)"
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+        {loading ? (
+          <div className="flex justify-center items-center min-h-[60vh]">
+            <Loader className="h-12 w-12 animate-spin text-primary" />
+          </div>
+        ) : (
+          <>
+            <div className="mb-8 w-full">
+              <StatCards />
             </div>
-          </div>
-        </div>
 
-        <div className="bg-white rounded-xl shadow-lg p-6 transition-all duration-300 hover:shadow-xl">
-          <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <FormControl sx={{ minWidth: 240 }}>
-              <InputLabel>Filter by System Type</InputLabel>
-              <Select
-                value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value)}
-                className="bg-white"
-                sx={{
-                  "& .MuiOutlinedInput-root": {
-                    "&:hover fieldset": {
-                      borderColor: "#3b82f6",
-                    },
-                  },
-                }}
-              >
-                <MenuItem value="all">All Systems</MenuItem>
-                <MenuItem value="split-system">Split System</MenuItem>
-                <MenuItem value="heat-pump-system">Heat Pump System</MenuItem>
-                <MenuItem value="chilled-water-system">
-                  Chilled Water System
-                </MenuItem>
-                <MenuItem value="variable-refrigerant-flow-system">
-                  VRF System
-                </MenuItem>
-              </Select>
-            </FormControl>
-            <Typography variant="body2" className="text-gray-600 font-medium">
-              {filteredSimulations.length} simulation
-              {filteredSimulations.length !== 1 ? "s" : ""} found
-            </Typography>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead>
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Power (kW)
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fan Speed (%)
-                  </th>
-
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Air Flow Rate (m³/s)
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Current Temp (°C)
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    External Temp (°C)
-                  </th>
-
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Wall Insulation
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Final Temp (°C)
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Energy (kW)
-                  </th>
-                  <th
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                    onClick={handleSort}
+            <div className="w-full mt-6">
+              <Card className="w-full bg-background text-primary border border-input">
+                <CardHeader>
+                  <CardTitle>Energy & Power Consumption</CardTitle>
+                </CardHeader>
+                <CardContent className="h-[300px] w-full">
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    className="flex items-center justify-center"
                   >
-                    Date {sortConfig.direction === "asc" ? "↑" : "↓"}
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {sortedSimulations.map((sim) => (
-                  <tr key={sim.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {sim.type}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="font-mono text-blue-600">
-                        {sim.parameters.hvac.power}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="font-mono text-yellow-600">
-                        {sim.parameters.hvac.fanSpeed}
-                      </span>
-                    </td>
+                    <LineChart data={processedData}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="var(--accent)"
+                      />
+                      <XAxis
+                        dataKey="date"
+                        stroke="var(--border)"
+                        tick={{ fill: "var(--primary)" }}
+                      />
+                      <YAxis
+                        stroke="var(--border)"
+                        tick={{ fill: "var(--primary)" }}
+                      />
+                      <RechartsTooltip
+                        contentStyle={{
+                          backgroundColor: "rgba(var(--background-rgb), 0.75)",
+                          border: "2px solid var(--border)",
+                          borderRadius: "8px",
+                          color: "var(--primary)",
+                          backdropFilter: "blur(8px)",
+                          minWidth: "13rem",
+                          WebkitBackdropFilter: "blur(8px)",
+                        }}
+                        formatter={(value) => value.toFixed(2)}
+                      />
 
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="font-mono text-indigo-600">
-                        {sim.parameters.hvac.airFlowRate}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="font-mono text-blue-600">
-                        {sim.parameters.room.currentTemp}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="font-mono text-blue-600">
-                        {sim.parameters.room.externalTemp}
-                      </span>
-                    </td>
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="energy"
+                        stroke="var(--primary)"
+                        name="Energy (kW)"
+                        strokeWidth={3}
+                        dot={false}
+                        activeDot={{ r: 8, fill: "var(--primary)" }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="power"
+                        stroke="var(--chart-1)"
+                        name="Power (kW)"
+                        strokeWidth={3}
+                        dot={false}
+                        activeDot={{ r: 8, fill: "var(--chart-1)" }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
 
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="capitalize">
-                        {sim.parameters.room.wallInsulation}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="font-mono text-green-600">
-                        {sim.parameters.results.finalTemperature.toFixed(2)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="font-mono text-red-600">
-                        {(
-                          sim.parameters.results.energyConsumption / 1000
-                        ).toFixed(2)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {format(new Date(sim.created_at), "MMM d, yyyy HH:mm")}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          sim.is_success
-                            ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"
-                        }`}
-                      >
-                        {sim.is_success ? "Success" : "Failed"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+            <div className="w-full mt-6">
+              <Card className="w-full bg-background border border-input">
+                <CardHeader>
+                  <CardTitle>Simulation History</CardTitle>
+                </CardHeader>
+                <div className="flex flex-col sm:flex-row justify-between items-center px-6">
+                  <div className="w-full flex flex-col md:flex-row lg:flex-row sm:w-60 space-y-1.5">
+                    <Label
+                      htmlFor="systemType"
+                      className="whitespace-nowrap pr-4"
+                    >
+                      Filter by System Type
+                    </Label>
+                    <Select
+                      value={selectedType}
+                      onValueChange={setSelectedType}
+                    >
+                      <SelectTrigger id="systemType" className="bg-white">
+                        <SelectValue placeholder="Select a system type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Systems</SelectItem>
+                        <SelectItem value="split-system">
+                          Split System
+                        </SelectItem>
+                        <SelectItem value="heat-pump-system">
+                          Heat Pump System
+                        </SelectItem>
+                        <SelectItem value="chilled-water-system">
+                          Chilled Water System
+                        </SelectItem>
+                        <SelectItem value="variable-refrigerant-flow-system">
+                          VRF System
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <p className="text-sm font-medium text-ring">
+                    {filteredSimulations.length} simulation
+                    {filteredSimulations.length !== 1 ? "s" : ""} found
+                  </p>
+                </div>
+
+                <div className="w-full px-4">
+                  <Table className="w-full overflow-x-scroll">
+                    <TableHeader className="text-background">
+                      <TableRow className="text-primary/80">
+                        <TableHead className="whitespace-break-spaces font-bold">
+                          Type
+                        </TableHead>
+                        <TableHead className="whitespace-break-spaces font-bold">
+                          Power (kW)
+                        </TableHead>
+                        <TableHead className="whitespace-break-spaces font-bold">
+                          Fan Speed (%)
+                        </TableHead>
+                        <TableHead className="whitespace-break-spaces font-bold">
+                          Air Flow (m³/s)
+                        </TableHead>
+                        <TableHead className="whitespace-break-spaces font-bold">
+                          Current Temp (°C)
+                        </TableHead>
+                        <TableHead className="whitespace-break-spaces font-bold">
+                          External Temp (°C)
+                        </TableHead>
+                        <TableHead className="whitespace-break-spaces font-bold">
+                          Wall Insulation
+                        </TableHead>
+                        <TableHead className="whitespace-break-spaces font-bold">
+                          Final Temp (°C)
+                        </TableHead>
+                        <TableHead className="whitespace-break-spaces font-bold">
+                          Energy (kW)
+                        </TableHead>
+                        <TableHead
+                          onClick={handleSort}
+                          className="cursor-pointer whitespace-break-spaces font-bold flex flex-row items-center justify-center"
+                        >
+                          Date{" "}
+                          {sortConfig.direction === "asc" ? (
+                            <ChevronUp />
+                          ) : (
+                            <ChevronDown />
+                          )}
+                        </TableHead>
+                        <TableHead className="whitespace-break-spaces font-bold">
+                          Status
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedSimulations.map((sim) => (
+                        <TableRow
+                          key={sim.id}
+                          className="hover:bg-accent/5 bg-background text-primary"
+                        >
+                          <TableCell className="whitespace-break-spaces">
+                            {sim.type
+                              .replace(/-/g, " ")
+                              .replace(/\b\w/g, (char) => char.toUpperCase())}
+                          </TableCell>
+                          <TableCell className="whitespace-break-spaces">
+                            {sim.parameters.hvac.power}
+                          </TableCell>
+                          <TableCell className="whitespace-break-spaces">
+                            {sim.parameters.hvac.fanSpeed}
+                          </TableCell>
+                          <TableCell className="whitespace-break-spaces">
+                            {sim.parameters.hvac.airFlowRate}
+                          </TableCell>
+                          <TableCell className="whitespace-break-spaces">
+                            {sim.parameters.room.currentTemp}
+                          </TableCell>
+                          <TableCell className="whitespace-break-spaces">
+                            {sim.parameters.room.externalTemp}
+                          </TableCell>
+                          <TableCell className="capitalize whitespace-break-spaces">
+                            {sim.parameters.room.wallInsulation}
+                          </TableCell>
+                          <TableCell className="whitespace-break-spaces">
+                            {sim.parameters.results.finalTemperature.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="whitespace-break-spaces">
+                            {(
+                              sim.parameters.results.energyConsumption / 1000
+                            ).toFixed(2)}
+                          </TableCell>
+                          <TableCell className="whitespace-break-spaces">
+                            {format(
+                              new Date(sim.created_at),
+                              "MMM d, yyyy HH:mm"
+                            )}
+                          </TableCell>
+                          <TableCell className="whitespace-break-spaces">
+                            <span
+                              className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                sim.is_success
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-red-100 text-red-800"
+                              }`}
+                            >
+                              {sim.is_success ? "Success" : "Failed"}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </Card>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="mt-6 flex justify-center">
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        onClick={() =>
+                          setCurrentPage((p) => Math.max(1, p - 1))
+                        }
+                        className="cursor-pointer"
+                      />
+                    </PaginationItem>
+                    <PaginationItem className="text-sm font-medium">
+                      Page {currentPage} of {totalPages}
+                    </PaginationItem>
+                    <PaginationItem>
+                      <PaginationNext
+                        onClick={() =>
+                          setCurrentPage((p) => Math.min(totalPages, p + 1))
+                        }
+                        className="cursor-pointer"
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
+          </>
+        )}
       </main>
     </div>
   );

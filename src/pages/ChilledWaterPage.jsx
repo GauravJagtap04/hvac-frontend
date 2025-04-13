@@ -4,6 +4,7 @@ import { supabase } from "../components/SupabaseClient";
 import { useNavigate } from "react-router-dom";
 import ChilledWaterSystemModel from "../components/Models/ChilledWaterSystemModel";
 import WeatherIntegration from "../components/WeatherIntegration";
+import Header from "@/components/Header";
 
 import DraggableBox from "../components/moveable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -259,7 +260,7 @@ const SimulationPage = () => {
     }
 
     const websocket = new WebSocket(
-      `${protocol}//localhost:8000/ws/${user.id}/chilled-water-system`
+      `${protocol}//gauravjagtap.me/ws/${user.id}/chilled-water-system`
     );
 
     websocket.onopen = () => {
@@ -792,10 +793,7 @@ const SimulationPage = () => {
         </div>
 
         {/* System Status Section */}
-        <div className="w-full">
-          <h2 className="text-md font-bold mb-2 text-primary px-6">
-            System Status
-          </h2>
+        <div className="w-full mt-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 lg:gap-4 w-full overflow-x-auto pb-2">
             <StatusCard
               title="Room Temperature"
@@ -1748,7 +1746,13 @@ const SimulationPage = () => {
           </div>
         )}
       </div>
-      <Toaster position="bottom-right" theme={theme} />
+      <Toaster
+        position="bottom-right"
+        theme={theme}
+        toastOptions={{
+          className: "bg-background text-primary font-rubik",
+        }}
+      />
     </div>
   );
 };

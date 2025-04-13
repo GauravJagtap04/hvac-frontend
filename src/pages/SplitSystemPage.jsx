@@ -22,7 +22,15 @@ import {
   SelectValue,
   SelectGroup,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
+
+import { Sun, Moon } from "lucide-react";
 
 import {
   LineChart,
@@ -42,6 +50,7 @@ import {
   setConnectionStatus,
   setSimulationStatus,
   setSimulationPaused,
+  setTheme,
 } from "../store/store";
 
 const SYSTEM_TYPE = "splitSystem";
@@ -86,9 +95,26 @@ const SimulationPage = () => {
   // theme state
   useEffect(() => {
     const rootElement = document.getElementById("root");
-    const isDark = rootElement?.classList.contains("dark");
-    setTheme(isDark ? "dark" : "light");
-  }, []);
+    if (theme === "dark") {
+      rootElement.classList.add("dark");
+    } else {
+      rootElement.classList.remove("dark");
+    }
+  }, [theme]);
+
+  // system theme changes useeffect
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const handleThemeChange = (e) => {
+      const newTheme = e.matches ? "dark" : "light";
+      dispatch(setTheme(newTheme));
+    };
+
+    mediaQuery.addEventListener("change", handleThemeChange);
+
+    return () => mediaQuery.removeEventListener("change", handleThemeChange);
+  }, [dispatch]);
 
   // fan speed toast
   useEffect(() => {
@@ -245,7 +271,7 @@ const SimulationPage = () => {
 
     // Determine the WebSocket protocol based on the page's protocol
     const websocket = new WebSocket(
-      `${protocol}//localhost:8000/ws/${user.id}/split-system`
+      `${protocol}//gauravjagtap.me/ws/${user.id}/split-system`
     );
 
     websocket.onopen = () => {
@@ -718,10 +744,42 @@ const SimulationPage = () => {
                 <Button
                   variant="outline"
                   onClick={toggleFailureBox}
-                  className="flex items-center h-[38] gap-2 text-primary hover:bg-primary dark:hover:bg-primary hover:text-background transition-all duration-400"
+                  className="flex items-center h-[38] gap-2 text-primary bg-background dark:bg-background hover:bg-primary dark:hover:bg-primary hover:text-background transition-all duration-400"
                 >
                   {showFailureBox ? "Hide" : "Show"} Failure Log
                 </Button>
+              </div>
+
+              <div className="flex justify-center mr-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div
+                        className={`w-13 h-7 border border-input p-0.5 bg-background rounded-full relative flex items-center cursor-pointer hover:border-primary/50 transition-all duration-200 inset-shadow-sm shadow-primary inset-shadow-primary/20 dark:inset-shadow-primary/20 dark:shadow-primary/10 dark:shadow-sm`}
+                        onClick={() =>
+                          dispatch(
+                            setTheme(theme === "light" ? "dark" : "light")
+                          )
+                        }
+                      >
+                        <div
+                          className={`w-6 h-6 bg-primary rounded-full absolute flex items-center justify-center transition-transform duration-300 ${
+                            theme === "dark" ? "translate-x-6" : "translate-x-0"
+                          }`}
+                        >
+                          {theme === "dark" ? (
+                            <Moon className="h-4 w-4 text-primary-foreground" />
+                          ) : (
+                            <Sun className="h-3.5 w-3.5 text-background" />
+                          )}
+                        </div>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{theme === "dark" ? "Light mode" : "Dark mode"}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
 
               {authError && (
@@ -736,10 +794,7 @@ const SimulationPage = () => {
         </div>
 
         {/* System Status Section */}
-        <div className="w-full">
-          <h2 className="text-md font-bold mb-2 text-primary px-6">
-            System Status
-          </h2>
+        <div className="w-full mt-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 lg:gap-4 w-full overflow-x-auto pb-2">
             <StatusCard
               title="Room Temperature"
@@ -1465,7 +1520,13 @@ const SimulationPage = () => {
           </div>
         )}
       </div>
-      <Toaster position="bottom-right" theme={theme} />
+      <Toaster
+        position="bottom-right"
+        theme={theme}
+        toastOptions={{
+          className: "bg-background text-primary font-rubik",
+        }}
+      />
     </div>
   );
 };

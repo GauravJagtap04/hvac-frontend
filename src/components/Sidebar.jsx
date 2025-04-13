@@ -1,31 +1,32 @@
 import { useState, useEffect } from "react";
-import { NavLink, useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { supabase } from "./SupabaseClient";
 import { logout } from "../store/slices/authSlice";
+
+import { Button } from "@/components/ui/button";
 import {
-  FaTemperatureHigh,
-  FaWind,
-  FaChartLine,
-  FaCog,
-  FaBook,
-  FaCalculator,
-  FaChevronLeft,
-  FaChevronRight,
-  FaHome,
-  FaSignOutAlt,
-  FaCalendarAlt,
-  FaMap,
-  FaUser,
-  FaTrophy,
-  FaGraduationCap,
-  FaClipboardList,
-} from "react-icons/fa";
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+import {
+  LayoutDashboard,
+  DiamondPlus,
+  ChartPie,
+  Book,
+  Bolt,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 
 const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
-  const [activeSubmenu, setActiveSubmenu] = useState("");
   const [userName, setUserName] = useState("");
-
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -35,18 +36,30 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       sessionStorage.clear();
       await supabase.auth.signOut();
       dispatch(logout());
-      localStorage.removeItem("user"); // Clear user data from localStorage
       navigate("/login");
     } catch (error) {
       console.error("Error logging out:", error);
     }
   };
+
+  const toggleSidebar = () => {
+    const newState = !isCollapsed;
+    setIsCollapsed(newState);
+    sessionStorage.setItem("sidebarCollapsed", newState);
+  };
+
   useEffect(() => {
+    const savedSidebarState = sessionStorage.getItem("sidebarCollapsed");
+    if (savedSidebarState !== null) {
+      setIsCollapsed(JSON.parse(savedSidebarState));
+    }
+
     const fetchUserData = async () => {
       try {
-        const user = JSON.parse(localStorage.getItem("user")); // Parse the string into an object
-        console.log("User from localStorage:", user.id);
-        if (user) {
+        const activeUserId = sessionStorage.getItem("activeUserId");
+        const user = JSON.parse(sessionStorage.getItem(`user_${activeUserId}`));
+
+        if (user && user.id) {
           const { data, error } = await supabase
             .from("users")
             .select("name")
@@ -56,7 +69,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
           if (error) throw error;
           if (data) {
             setUserName(data.name);
-            console.log("User name:", userName);
           }
         }
       } catch (error) {
@@ -65,52 +77,50 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
     };
 
     fetchUserData();
-  }, []);
+  }, [setIsCollapsed]);
+
   const MenuItem = ({ to, icon, text }) => {
     const isActive = location.pathname === to;
 
     return (
-      <NavLink
-        to={to}
-        className={`flex items-center p-2 rounded-lg hover:bg-slate-700 group transition-all duration-200 ${
-          isActive
-            ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md"
-            : ""
-        }`}
-      >
-        <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
-          <span
-            className={`text-xl ${isActive ? "text-white" : "text-blue-400"}`}
-          >
-            {icon}
-          </span>
-        </div>
-        {!isCollapsed && (
-          <span
-            className={`ml-3 text-sm font-medium whitespace-nowrap transition-opacity ${
-              isActive ? "text-white" : "text-gray-300"
-            }`}
-          >
-            {text}
-          </span>
-        )}
-        {isCollapsed && (
-          <div className="absolute left-16 scale-0 group-hover:scale-100 transition-all duration-100 bg-gray-800 text-white text-sm py-1 px-2 rounded ml-2 whitespace-nowrap z-50">
-            {text}
-          </div>
-        )}
-      </NavLink>
+      <TooltipProvider delayDuration={0}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={isActive ? "default" : "ghost"}
+              size={isCollapsed ? "icon" : "default"}
+              className={`w-full justify-start mb-1 ${
+                isActive
+                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700"
+                  : "hover:bg-primary hover:text-background dark:hover:bg-primary dark:hover:text-background text-primary"
+              }`}
+              onClick={() => navigate(to)}
+            >
+              {icon}
+              {!isCollapsed && (
+                <span className="ml-3 text-sm font-medium">{text}</span>
+              )}
+            </Button>
+          </TooltipTrigger>
+          {isCollapsed && (
+            <TooltipContent
+              side="right"
+              className="bg-gray-800 text-white border-gray-700"
+            >
+              {text}
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </TooltipProvider>
     );
   };
 
   return (
-    <div className="relative h-full ">
-      {/* Toggle button */}
-
+    <div className="relative h-full">
       <div
         className={`${
-          isCollapsed ? "w-20" : "w-64"
-        } h-full flex flex-col transition-all duration-300 ease-in-out bg-gradient-to-b from-slate-800 to-slate-900 min-h-screen fixed left-0 top-0 z-40 pt-8 px-3 shadow-xl`}
+          isCollapsed ? "w-17" : "w-61"
+        }  my-3 ml-3 min-h-[calc(100%-24px)] flex flex-col rounded-2xl ease-in-out bg-background dark:bg-backround fixed left-0 top-0 z-40 pt-8 px-3 pb-3 dark:shadow-primary dark:shadow-[0px_0px_1px_0px_rgba(0,0,0,0.5)] shadow-md backdrop-blur-sm`}
       >
         {/* Logo Section */}
         <div
@@ -118,88 +128,118 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             isCollapsed ? "justify-center" : "justify-between"
           }`}
         >
-          <div className="flex items-start overflow-hidden">
+          <div className="flex items-center overflow-hidden">
             <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-1 rounded-lg flex items-center justify-center">
               <img src="/logo.svg" alt="HVAC Logo" className="h-6 w-6" />
             </div>
             {!isCollapsed && (
-              <span className="ml-2 text-lg font-bold text-white bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-300">
+              <span className="ml-2 text-lg font-bold text-primary bg-clip-text">
                 HVAC Simulation
               </span>
             )}
           </div>
         </div>
-        <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className={`absolute top-20 ${
-            isCollapsed ? "left-16" : "left-60"
-          } z-50 bg-white text-black border-1 border-black rounded-full p-2 shadow-lg focus:outline-none transition-all duration-300 ease-in-out hover:scale-110`}
+
+        {/* Toggle button using shadcn Button */}
+        <Button
+          size="icon"
+          onClick={toggleSidebar}
+          className={`absolute top-30 ${
+            isCollapsed ? "left-13" : "left-57"
+          } z-50 bg-background size-10 text-primary border border-border rounded-full hover:scale-110 transition-all duration-300 ease-in-out hover:text-background`}
         >
           {isCollapsed ? (
-            <FaChevronRight className="h-4 w-4" />
+            <ChevronRight size={24} strokeWidth={2} />
           ) : (
-            <FaChevronLeft className="h-4 w-4" />
+            <ChevronLeft size={24} strokeWidth={2} />
           )}
-        </button>
+        </Button>
+
         {/* Navigation */}
-        <nav className="flex-1 mt-2 overflow-y-auto py-2">
+        <ScrollArea className="flex-1 py-2">
           <div className="px-3 pb-2">
             {!isCollapsed && (
-              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              <h2 className="text-xs font-semibold text-ring uppercase tracking-wider">
                 Main
               </h2>
             )}
           </div>
 
-          <ul className="space-y-1 px-1">
-            <li>
-              <MenuItem to="/dashboard" icon={<FaHome />} text="Dashboard" />
-            </li>
-            <li>
-              <MenuItem
-                to="/simulations"
-                icon={<FaCalculator />}
-                text="Simulation Tools"
-              />
-            </li>
-            <li>
-              <MenuItem
-                to="/analytics"
-                icon={<FaChartLine />}
-                text="Analytics"
-              />
-            </li>
-            <li>
-              <MenuItem to="/training" icon={<FaBook />} text="Training" />
-            </li>
-            <li>
-              <MenuItem to="/settings" icon={<FaCog />} text="Settings" />
-            </li>
-          </ul>
-        </nav>
+          <div className="space-y-1 px-1">
+            <MenuItem
+              to="/dashboard"
+              icon={
+                <LayoutDashboard
+                  size={24}
+                  className={isCollapsed ? "mx-auto" : ""}
+                />
+              }
+              text="Dashboard"
+              className="bg-primary text-background"
+            />
+            <MenuItem
+              to="/simulations"
+              icon={
+                <DiamondPlus
+                  size={24}
+                  className={isCollapsed ? "mx-auto" : ""}
+                />
+              }
+              text="Simulation Tools"
+              className="bg-primary text-background"
+            />
+            <MenuItem
+              to="/analytics"
+              icon={
+                <ChartPie size={24} className={isCollapsed ? "mx-auto" : ""} />
+              }
+              text="Analytics"
+              className="bg-primary text-background"
+            />
+            <MenuItem
+              to="/training"
+              icon={<Book size={24} className={isCollapsed ? "mx-auto" : ""} />}
+              text="Training"
+              className="bg-primary text-background"
+            />
+            <MenuItem
+              to="/settings"
+              icon={<Bolt size={24} className={isCollapsed ? "mx-auto" : ""} />}
+              text="Settings"
+              className="bg-primary text-background"
+            />
+          </div>
+        </ScrollArea>
 
-        {/* Logout button at bottom */}
-        <div className="p-1 border-t border-gray-700 mt-auto">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center p-2 rounded-lg hover:bg-slate-700 group transition-all duration-200"
-          >
-            <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
-              <span className="text-xl text-red-400">
-                <FaSignOutAlt />
-              </span>
-            </div>
-            {!isCollapsed && (
-              <span className="ml-3 text-sm font-medium whitespace-nowrap text-red-400">
-                Logout
-              </span>
-            )}
-            {isCollapsed && (
-              <div className="absolute left-16 scale-0 group-hover:scale-100 transition-all duration-100 bg-gray-800 text-white text-sm py-1 px-2 rounded ml-2 whitespace-nowrap z-50">
-                Logout
-              </div>
-            )}
-          </button>
+        {/* User info and logout section */}
+        <div>
+          <Separator className="my-3 bg-ring" />
+
+          <TooltipProvider delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size={isCollapsed ? "icon" : "default"}
+                  className="w-full justify-start hover:bg-destructive hover:text-background dark:hover:bg-destructive dark:hover:text-primary text-destructive"
+                  onClick={handleLogout}
+                >
+                  <LogOut size={24} className={isCollapsed ? "mx-auto" : ""} />
+                  {!isCollapsed && (
+                    <span className="ml-3 text-sm font-medium">Logout</span>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              {isCollapsed && (
+                <TooltipContent
+                  side="right"
+                  className="bg-gray-800 text-white border-gray-700"
+                >
+                  Logout
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
     </div>

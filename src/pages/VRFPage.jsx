@@ -263,7 +263,7 @@ const SimulationPage = () => {
     }
 
     const websocket = new WebSocket(
-      `${protocol}//localhost:8000/ws/${user.id}/variable-refrigerant-flow-system`
+      `${protocol}//gauravjagtap.me/ws/${user.id}/variable-refrigerant-flow-system`
     );
 
     websocket.onopen = () => {
@@ -809,10 +809,7 @@ const SimulationPage = () => {
         </div>
 
         {/* System Status Section */}
-        <div className="w-full">
-          <h2 className="text-md font-bold mb-2 text-primary px-6">
-            System Status
-          </h2>
+        <div className="w-full mt-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 lg:gap-4 w-full overflow-x-auto pb-2">
             <StatusCard
               title="Room Temperature"
@@ -1269,110 +1266,6 @@ const SimulationPage = () => {
                     }
                   />
                 </div>
-                <div className="space-y-2">
-                  <h3 className="text-base font-medium mb-2">
-                    Zone Load Configuration
-                  </h3>
-
-                  {Object.entries(safeObject(hvacParameters.zones)).map(
-                    ([zone, load], index) => (
-                      <div key={zone} className="flex items-center gap-3 mt-4">
-                        <div className="flex-1 space-y-1">
-                          <Label htmlFor={`zone-${index}`}>{zone} Zone</Label>
-                          <Input
-                            id={`zone-${index}`}
-                            type="number"
-                            value={load}
-                            step={0.1}
-                            min={0}
-                            disabled={
-                              (isSimulationRunning && !isSimulationPaused) ||
-                              hasInvalidFields
-                            }
-                            onChange={(e) => {
-                              const newValue =
-                                sanitizeNumericInput(e.target.value || 1) || 1;
-                              // Validate zone load
-                              const newInvalidFields = { ...invalidFields };
-                              newInvalidFields[`zone_${zone}`] = newValue <= 1;
-                              setInvalidFields(newInvalidFields);
-
-                              const newZones = {
-                                ...hvacParameters.zones,
-                                [zone]: newValue,
-                              };
-                              handleHVACParameterChange("zones")({
-                                target: { value: newZones },
-                              });
-                            }}
-                          />
-                        </div>
-                        <span className="text-sm text-muted-foreground">
-                          kW
-                        </span>
-                        {invalidFields[`zone_${zone}`] && (
-                          <p className="text-sm text-destructive">
-                            Zone Load cannot be zero or negative
-                          </p>
-                        )}
-                      </div>
-                    )
-                  )}
-
-                  <div className="mt-4 flex gap-4">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        const existingNumbers = Object.keys(
-                          hvacParameters.zones
-                        )
-                          .map((name) => parseInt(name.replace(/\D/g, ""), 10))
-                          .filter((num) => !isNaN(num));
-
-                        const nextNumber = existingNumbers.length
-                          ? Math.max(...existingNumbers) + 1
-                          : 1;
-                        const zoneName = `Zone ${nextNumber}`;
-                        const newZones = {
-                          ...hvacParameters.zones,
-                          [zoneName]: 0,
-                        };
-                        handleHVACParameterChange("zones")({
-                          target: { value: newZones },
-                        });
-                      }}
-                      disabled={
-                        (isSimulationRunning && !isSimulationPaused) ||
-                        hasInvalidFields
-                      }
-                      className="cursor-pointer"
-                    >
-                      Add Zone
-                    </Button>
-
-                    <Button
-                      variant="destructive"
-                      onClick={() => {
-                        const zoneKeys = Object.keys(hvacParameters.zones);
-                        if (zoneKeys.length > 1) {
-                          const newZones = { ...hvacParameters.zones };
-                          delete newZones[zoneKeys[zoneKeys.length - 1]];
-                          handleHVACParameterChange("zones")({
-                            target: { value: newZones },
-                          });
-                        }
-                      }}
-                      disabled={
-                        Object.keys(hvacParameters.zones).length <= 1 ||
-                        (isSimulationRunning && !isSimulationPaused) ||
-                        hasInvalidFields
-                      }
-                      className="cursor-pointer"
-                    >
-                      Remove Zone
-                    </Button>
-                  </div>
-                </div>
 
                 <div className="space-y-2">
                   <div className="flex justify-between">
@@ -1740,7 +1633,13 @@ const SimulationPage = () => {
           </div>
         )}
       </div>
-      <Toaster position="bottom-right" theme={theme} />
+      <Toaster
+        position="bottom-right"
+        theme={theme}
+        toastOptions={{
+          className: "bg-background text-primary font-rubik",
+        }}
+      />
     </div>
   );
 };

@@ -1,82 +1,16 @@
 import React, { useState, useEffect } from "react";
-import { useOutletContext, useNavigate } from "react-router-dom";
+import { useOutletContext } from "react-router-dom";
 import { supabase } from "../components/SupabaseClient";
+import Header from "@/components/Header";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Toaster } from "sonner";
+import { toast } from "sonner";
 
-const SettingsPage = () => {
+import { Loader } from "lucide-react";
+
+const HVACSettingsPage = () => {
   const { isCollapsed } = useOutletContext();
-  const [activeTab, setActiveTab] = useState("general");
-  const navigate = useNavigate();
-
-  const tabs = [
-    { id: "general", name: "General Settings" },
-    { id: "hvac_systems", name: "HVAC Systems" },
-    { id: "system", name: "System Configuration" },
-    { id: "notifications", name: "Notifications" },
-    { id: "security", name: "Security & Privacy" },
-  ];
-  const goBack = () => {
-    navigate(-1);
-  };
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="bg-blue-100 dark:bg-gray-800 shadow-lg z-10">
-        <div className="px-3 py-2 sm:p-4 flex items-center justify-between">
-          <div className="flex items-center space-x-1 sm:space-x-2">
-            <div className="flex items-center space-x-2 sm:space-x-4"></div>
-            <h1 className="text-base sm:text-xl font-semibold ml-1 sm:ml-3 text-gray-800 dark:text-white truncate">
-              Settings
-            </h1>
-          </div>
-
-          <div className="flex items-center space-x-2 sm:space-x-4">
-            {/* Add additional header items here */}
-          </div>
-        </div>
-      </header>
-
-      <main
-        className={`transition-all duration-300 ${
-          isCollapsed ? "max-w-8xl" : "max-w-7xl"
-        } mx-auto px-4 sm:px-6 lg:px-8 py-8`}
-      >
-        <div className="grid grid-cols-12 gap-6">
-          {/* Settings Navigation */}
-          <div className="col-span-12 lg:col-span-3">
-            <nav className="space-y-1">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg ${
-                    activeTab === tab.id
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-gray-900 hover:bg-gray-50"
-                  }`}
-                >
-                  {tab.name}
-                </button>
-              ))}
-            </nav>
-          </div>
-
-          {/* Settings Content */}
-          <div className="col-span-12 lg:col-span-9">
-            <div className="bg-white shadow-sm rounded-lg">
-              {activeTab === "general" && <GeneralSettings />}
-              {activeTab === "hvac_systems" && <HVACSystemSettings />}
-              {activeTab === "system" && <SystemSettings />}
-              {activeTab === "notifications" && <NotificationSettings />}
-              {activeTab === "security" && <SecuritySettings />}
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
-  );
-};
-
-// New HVAC Systems Settings Component
-const HVACSystemSettings = () => {
   const [systemSettings, setSystemSettings] = useState({
     is_split: false,
     is_vrf: false,
@@ -85,7 +19,7 @@ const HVACSystemSettings = () => {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState({ type: "", text: "" });
+  const theme = localStorage.getItem("theme") || "light";
 
   useEffect(() => {
     fetchUserSettings();
@@ -135,15 +69,11 @@ const HVACSystemSettings = () => {
   const saveSettings = async () => {
     try {
       setIsSaving(true);
-      setSaveMessage({ type: "", text: "" });
 
       const user = JSON.parse(localStorage.getItem("user"));
 
       if (!user) {
-        setSaveMessage({
-          type: "error",
-          text: "User not found. Please log in again.",
-        });
+        toast.error("User not found. Please log in again.");
         return;
       }
 
@@ -154,275 +84,147 @@ const HVACSystemSettings = () => {
 
       if (error) throw error;
 
-      setSaveMessage({
-        type: "success",
-        text: "HVAC system settings saved successfully!",
-      });
+      toast.success("HVAC Settings saved successfully!");
     } catch (error) {
       console.error("Error saving settings:", error);
-      setSaveMessage({
-        type: "error",
-        text: "Failed to save settings. Please try again.",
-      });
+      toast.error("Failed to save settings. Please try again.");
     } finally {
       setIsSaving(false);
-      setTimeout(() => setSaveMessage({ type: "", text: "" }), 3000);
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="p-6 flex justify-center">
-        <div className="animate-pulse">Loading settings...</div>
-      </div>
-    );
-  }
+  const hvacSystems = [
+    {
+      id: "is_split",
+      name: "Split System",
+      description:
+        "Traditional HVAC system with indoor and outdoor units for efficient temperature control",
+      gradient: "from-blue-500 to-indigo-600",
+    },
+    {
+      id: "is_vrf",
+      name: "VRF System",
+      description:
+        "Variable Refrigerant Flow system for precise zoning and simultaneous heating and cooling",
+      gradient: "from-purple-500 to-pink-600",
+    },
+    {
+      id: "is_heat",
+      name: "Heat Pump System",
+      description:
+        "Energy-efficient heating and cooling system that transfers heat between indoor and outdoor air",
+      gradient: "from-orange-500 to-red-600",
+    },
+    {
+      id: "is_chilled",
+      name: "Chilled Water System",
+      description:
+        "Central cooling system for larger buildings using water as a medium for heat transfer",
+      gradient: "from-teal-500 to-green-600",
+    },
+  ];
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-lg font-medium text-gray-900">
-          HVAC System Visibility
-        </h2>
-        <button
-          onClick={saveSettings}
-          disabled={isSaving}
-          className={`px-4 py-2 rounded-md ${
-            isSaving
-              ? "bg-gray-300 cursor-not-allowed"
-              : "bg-blue-600 text-white hover:bg-blue-700"
-          } transition-colors`}
-        >
-          {isSaving ? "Saving..." : "Save Changes"}
-        </button>
-      </div>
+    <div className="min-h-screen bg-background">
+      <Header isCollapsed={isCollapsed} name="Settings" />
 
-      {saveMessage.text && (
-        <div
-          className={`p-3 rounded-md ${
-            saveMessage.type === "success"
-              ? "bg-green-50 text-green-800"
-              : "bg-red-50 text-red-800"
-          }`}
-        >
-          {saveMessage.text}
-        </div>
-      )}
-
-      <p className="text-sm text-gray-500">
-        Select which HVAC systems you want to see in the application. The
-        selected systems will appear in your dashboard and simulations.
-      </p>
-
-      <div className="space-y-4">
-        <SettingItem
-          title="Split System"
-          description="Traditional HVAC system with indoor and outdoor units"
-        >
-          <div className="flex items-center">
-            <label className="inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={systemSettings.is_split}
-                onChange={() => handleToggle("is_split")}
-              />
-              <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
+      <main
+        className={`transition-all duration-300 ${
+          isCollapsed ? "max-w-8xl" : "max-w-7xl"
+        } mx-auto px-4 sm:px-6 lg:px-8 py-8`}
+      >
+        {isLoading ? (
+          <div className="flex justify-center items-center min-h-[60vh]">
+            <Loader className="h-12 w-12 animate-spin text-primary" />
           </div>
-        </SettingItem>
+        ) : (
+          <>
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-2xl font-bold tracking-tight text-primary">
+                HVAC Systems
+              </h1>
+              <Button
+                onClick={saveSettings}
+                disabled={isSaving}
+                className="px-4 py-2"
+              >
+                {isSaving ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
 
-        <SettingItem
-          title="VRF System"
-          description="Variable Refrigerant Flow system for multiple zones"
-        >
-          <div className="flex items-center">
-            <label className="inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={systemSettings.is_vrf}
-                onChange={() => handleToggle("is_vrf")}
-              />
-              <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
-        </SettingItem>
+            <p className="text-muted-foreground mb-6">
+              Select which HVAC systems you want to use in the application. The
+              selected systems will appear in your dashboard and simulations.
+            </p>
 
-        <SettingItem
-          title="Heat Pump System"
-          description="Energy-efficient heating and cooling system"
-        >
-          <div className="flex items-center">
-            <label className="inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={systemSettings.is_heat}
-                onChange={() => handleToggle("is_heat")}
-              />
-              <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
-        </SettingItem>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 place-items-center justify-items-center">
+              {hvacSystems.map((system) => (
+                <div
+                  key={system.id}
+                  onClick={() => handleToggle(system.id)}
+                  className="cursor-pointer relative"
+                >
+                  <Card
+                    className={`h-80 overflow-hidden transition-all duration-500 hover:shadow-lg rounded-2xl max-w-sm relative ${
+                      systemSettings[system.id] ? "" : "grayscale"
+                    }`}
+                  >
+                    <div
+                      className={`absolute inset-0 bg-gradient-to-br ${system.gradient} opacity-70 rounded-2xl`}
+                    />
 
-        <SettingItem
-          title="Chilled Water System"
-          description="Central cooling system for larger buildings"
-        >
-          <div className="flex items-center">
-            <label className="inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={systemSettings.is_chilled}
-                onChange={() => handleToggle("is_chilled")}
-              />
-              <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
-        </SettingItem>
-      </div>
+                    <CardContent className="p-0 h-full flex flex-col justify-between">
+                      <div className="relative z-10 p-6 grow">
+                        <h3 className="text-lg font-semibold text-white mb-2">
+                          {system.name}
+                        </h3>
+                        <p className="text-white/80 text-sm leading-relaxed">
+                          {system.description}
+                        </p>
+                      </div>
+                    </CardContent>
+                    <CardFooter className="relative z-10 p-4 pt-0 flex justify-end">
+                      <div
+                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                          systemSettings[system.id]
+                            ? "bg-white border-white"
+                            : "border-white/50"
+                        }`}
+                      >
+                        {systemSettings[system.id] && (
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="text-indigo-600"
+                          >
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                          </svg>
+                        )}
+                      </div>
+                    </CardFooter>
+                  </Card>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </main>
+      <Toaster
+        position="bottom-right"
+        theme={theme}
+        toastOptions={{
+          className: "bg-background text-primary font-rubik",
+        }}
+      />
     </div>
   );
 };
 
-const GeneralSettings = () => (
-  <div className="p-6 space-y-6">
-    <h2 className="text-lg font-medium text-gray-900">General Settings</h2>
-    <div className="space-y-4">
-      <SettingItem
-        title="Language"
-        description="Select your preferred language"
-      >
-        <select className="form-select rounded-md border-gray-300">
-          <option>English</option>
-          <option>Spanish</option>
-          <option>French</option>
-        </select>
-      </SettingItem>
-      <SettingItem title="Time Zone" description="Choose your local time zone">
-        <select className="form-select rounded-md border-gray-300">
-          <option>UTC-5 Eastern Time</option>
-          <option>UTC-6 Central Time</option>
-          <option>UTC-7 Mountain Time</option>
-        </select>
-      </SettingItem>
-      <SettingItem
-        title="Temperature Unit"
-        description="Select your preferred temperature unit"
-      >
-        <div className="flex space-x-4">
-          <label className="flex items-center">
-            <input type="radio" name="temp-unit" className="form-radio" />
-            <span className="ml-2">Celsius</span>
-          </label>
-          <label className="flex items-center">
-            <input type="radio" name="temp-unit" className="form-radio" />
-            <span className="ml-2">Fahrenheit</span>
-          </label>
-        </div>
-      </SettingItem>
-    </div>
-  </div>
-);
-
-const SystemSettings = () => (
-  <div className="p-6 space-y-6">
-    <h2 className="text-lg font-medium text-gray-900">System Configuration</h2>
-    <div className="space-y-4">
-      <SettingItem
-        title="Simulation Update Rate"
-        description="Set how frequently the simulation updates"
-      >
-        <select className="form-select rounded-md border-gray-300">
-          <option>Real-time</option>
-          <option>Every 5 seconds</option>
-          <option>Every 10 seconds</option>
-        </select>
-      </SettingItem>
-      <SettingItem
-        title="Data Logging"
-        description="Configure system data logging preferences"
-      >
-        <div className="space-y-2">
-          <label className="flex items-center">
-            <input type="checkbox" className="form-checkbox" />
-            <span className="ml-2">Enable detailed logging</span>
-          </label>
-          <label className="flex items-center">
-            <input type="checkbox" className="form-checkbox" />
-            <span className="ml-2">Archive logs weekly</span>
-          </label>
-        </div>
-      </SettingItem>
-    </div>
-  </div>
-);
-
-const NotificationSettings = () => (
-  <div className="p-6 space-y-6">
-    <h2 className="text-lg font-medium text-gray-900">
-      Notification Preferences
-    </h2>
-    <div className="space-y-4">
-      <SettingItem
-        title="Alert Settings"
-        description="Configure how you receive alerts"
-      >
-        <div className="space-y-2">
-          <label className="flex items-center">
-            <input type="checkbox" className="form-checkbox" />
-            <span className="ml-2">Email notifications</span>
-          </label>
-          <label className="flex items-center">
-            <input type="checkbox" className="form-checkbox" />
-            <span className="ml-2">Push notifications</span>
-          </label>
-          <label className="flex items-center">
-            <input type="checkbox" className="form-checkbox" />
-            <span className="ml-2">SMS alerts</span>
-          </label>
-        </div>
-      </SettingItem>
-    </div>
-  </div>
-);
-
-const SecuritySettings = () => (
-  <div className="p-6 space-y-6">
-    <h2 className="text-lg font-medium text-gray-900">Security & Privacy</h2>
-    <div className="space-y-4">
-      <SettingItem
-        title="Two-Factor Authentication"
-        description="Add an extra layer of security"
-      >
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-          Enable 2FA
-        </button>
-      </SettingItem>
-      <SettingItem
-        title="Session Timeout"
-        description="Set automatic logout time"
-      >
-        <select className="form-select rounded-md border-gray-300">
-          <option>15 minutes</option>
-          <option>30 minutes</option>
-          <option>1 hour</option>
-        </select>
-      </SettingItem>
-    </div>
-  </div>
-);
-
-const SettingItem = ({ title, description, children }) => (
-  <div className="grid grid-cols-12 gap-4 items-start">
-    <div className="col-span-12 sm:col-span-4">
-      <h3 className="text-sm font-medium text-gray-900">{title}</h3>
-      <p className="text-sm text-gray-500">{description}</p>
-    </div>
-    <div className="col-span-12 sm:col-span-8">{children}</div>
-  </div>
-);
-
-export default SettingsPage;
+export default HVACSettingsPage;

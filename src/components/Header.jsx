@@ -10,7 +10,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-const Header = ({ isCollapsed }) => {
+const Header = ({ isCollapsed, name, Icon }) => {
   const dispatch = useDispatch();
   const theme = useSelector((state) => state.hvac.theme);
 
@@ -41,47 +41,51 @@ const Header = ({ isCollapsed }) => {
   };
 
   return (
-    <header
-      className={`bg-blue-100 dark:bg-gray-800 shadow-lg fixed top-0 ${
-        isCollapsed ? "left-[80px]" : "left-[250px]"
-      } right-0 z-10 transition-all duration-300`}
-    >
-      <div className="px-3 py-2 sm:p-4 flex items-center justify-between">
-        <div className="flex items-center space-x-1 sm:space-x-2">
-          <h1 className="text-base sm:text-xl font-semibold ml-1 sm:ml-3 text-gray-800 dark:text-white truncate">
-            Analytics
-          </h1>
-        </div>
+    <>
+      <header
+        className={`bg-background/40 mx-6 p-2 dark:shadow-primary dark:shadow-[0px_0px_1px_0px_rgba(0,0,0,0.5)] shadow-md backdrop-blur-sm fixed top-3 rounded-2xl ${
+          isCollapsed ? "left-[80px]" : "left-[250px]"
+        } right-0 z-30`}
+      >
+        <div className="px-3 py-2 sm:p-4 flex items-center justify-between">
+          <div className="flex items-center space-x-1 sm:space-x-2">
+            {Icon && <Icon className="h-6 w-6 text-gray-800 dark:text-white" />}
+            <h1 className="text-base sm:text-xl font-semibold ml-1 sm:ml-3 text-gray-800 dark:text-white truncate">
+              {name}
+            </h1>
+          </div>
 
-        <div className="flex items-center space-x-2 sm:space-x-4">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div
-                  className={`w-13 h-7 border border-input p-0.5 bg-background rounded-full relative flex items-center cursor-pointer hover:border-primary/50 transition-all duration-200 inset-shadow-sm shadow-primary inset-shadow-primary/20 dark:inset-shadow-primary/20 dark:shadow-primary/10 dark:shadow-sm`}
-                  onClick={handleThemeChange}
-                >
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <div
-                    className={`w-6 h-6 bg-primary rounded-full absolute flex items-center justify-center transition-transform duration-300 ${
-                      theme === "dark" ? "translate-x-6" : "translate-x-0"
-                    }`}
+                    className={`w-13 h-7 border border-input p-0.5 bg-background dark:bg-background/70 rounded-full relative flex items-center cursor-pointer hover:border-primary/50 transition-all duration-200`}
+                    onClick={handleThemeChange}
                   >
-                    {theme === "dark" ? (
-                      <Moon className="h-4 w-4 text-primary-foreground" />
-                    ) : (
-                      <Sun className="h-3.5 w-3.5 text-background" />
-                    )}
+                    <div
+                      className={`w-6 h-6 bg-primary rounded-full absolute flex items-center justify-center transition-transform duration-300 ${
+                        theme === "dark" ? "translate-x-6" : "translate-x-0"
+                      }`}
+                    >
+                      {theme === "dark" ? (
+                        <Moon className="h-4 w-4 text-primary-foreground" />
+                      ) : (
+                        <Sun className="h-3.5 w-3.5 text-background" />
+                      )}
+                    </div>
                   </div>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{theme === "dark" ? "Light mode" : "Dark mode"}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+                </TooltipTrigger>
+                <TooltipContent sideOffset={5} className="z-50">
+                  <p>{theme === "dark" ? "Light mode" : "Dark mode"}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+      <div className={`w-full h-[77px]`} />
+    </>
   );
 };
 

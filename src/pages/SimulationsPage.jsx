@@ -1,31 +1,44 @@
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Grid,
-  Container,
-  useTheme,
-  Snackbar,
-  Alert,
-  CircularProgress,
-} from "@mui/material";
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import { useDispatch, useSelector } from "react-redux";
-import { setSelectedSystem } from "../store/store";
-import { useOutletContext } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../components/SupabaseClient";
+import { useOutletContext } from "react-router-dom";
+
+import Header from "@/components/Header";
+
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Loader } from "lucide-react";
+import { Toaster } from "sonner";
+import { toast } from "sonner";
+
+import { motion } from "framer-motion";
+import { setSelectedSystem } from "../store/store";
+
+import splitHvacImage from "../assets/images/split-hvac.jpeg";
+import vrfHvacImage from "../assets/images/vrf-hvac.jpeg";
+import heatPumpHvacImage from "../assets/images/heat-pump-hvac.jpeg";
+import chilledWaterHvacImage from "../assets/images/chilled-water-hvac.jpeg";
+
+// Add keyframes for the animation
+const fadeInAnimation = `
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+`;
 
 const SimulationsPage = () => {
   const navigate = useNavigate();
-  const theme = useTheme();
   const dispatch = useDispatch();
   const { isCollapsed } = useOutletContext();
 
-  const [openSnackbar, setOpenSnackbar] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [availableSimulations, setAvailableSimulations] = useState([]);
   const [error, setError] = useState(null);
@@ -33,6 +46,52 @@ const SimulationsPage = () => {
   const { isSimulationRunning, selectedSystem } = useSelector(
     (state) => state.hvac
   );
+
+  const theme = useSelector((state) => state.hvac.theme);
+
+  // Simulation data
+  const simulations = [
+    {
+      id: "split-system",
+      name: "split system",
+      path: "/simulations/split-system",
+      title: "Split HVAC System",
+      description:
+        "Separate indoor and outdoor units for flexible temperature control in residential applications.",
+      image: splitHvacImage,
+      color: "hsl(var(--primary))",
+    },
+    {
+      id: "variable-refrigerant-flow-system",
+      name: "variable refrigerant flow system",
+      path: "/simulations/variable-refrigerant-flow-system",
+      title: "VRF System",
+      description:
+        "Variable Refrigerant Flow systems providing precise control for multi-zone commercial applications.",
+      image: vrfHvacImage,
+      color: "hsl(var(--primary))",
+    },
+    {
+      id: "heat-pump-system",
+      name: "heat pump system",
+      path: "/simulations/heat-pump-system",
+      title: "Heat Pump System",
+      description:
+        "Energy-efficient system that transfers heat between indoor and outdoor environments.",
+      image: heatPumpHvacImage,
+      color: "hsl(var(--primary))",
+    },
+    {
+      id: "chilled-water-system",
+      name: "chilled water system",
+      path: "/simulations/chilled-water-system",
+      title: "Chilled Water System",
+      description:
+        "Large capacity system ideal for commercial buildings using water as the cooling medium.",
+      image: chilledWaterHvacImage,
+      color: "hsl(var(--primary))",
+    },
+  ];
 
   // Fetch user data and filter available simulations
   useEffect(() => {
@@ -91,53 +150,11 @@ const SimulationsPage = () => {
     fetchUserData();
   }, []);
 
-  const simulations = [
-    {
-      name: "split system",
-      id: "split-system",
-      title: "Split System HVAC",
-      description:
-        "Simulate and analyze split system HVAC performance and efficiency",
-      icon: "🌡️",
-      path: "/simulations/split-system",
-      color: "#4CAF50",
-    },
-    {
-      name: "variable refrigerant flow system",
-      id: "variable-refrigerant-flow-system",
-      title: "Variable Refrigerant Flow System",
-      description: "VRF system simulation and analysis for energy efficiency",
-      icon: "❄️",
-      path: "/simulations/variable-refrigerant-flow-system",
-      color: "#2196F3",
-    },
-    {
-      name: "heat pump system",
-      id: "heat-pump-system",
-      title: "Heat Pump System",
-      description: "Comprehensive heat pump system simulation and analysis",
-      icon: "♨️",
-      path: "/simulations/heat-pump-system",
-      color: "#FF5722",
-    },
-    {
-      name: "chilled water system",
-      id: "chilled-water-system",
-      title: "Chilled Water System",
-      description:
-        "Chilled water system simulation and analysis for HVAC design",
-      icon: "💧",
-      path: "/simulations/chilled-water-system",
-      color: "#9C27B0",
-    },
-  ];
-
   const handleSimulationCardClick = (name, id, path) => {
     if (isSimulationRunning && name !== selectedSystem) {
-      setSnackbarMessage(
+      toast.warning(
         `Please stop the ${selectedSystem} simulation before switching to another system.`
       );
-      setOpenSnackbar(true);
       return;
     }
 
@@ -153,123 +170,46 @@ const SimulationsPage = () => {
       dispatch(setSelectedSystem("chilled water system"));
     }
   };
-  const goBack = () => {
-    navigate(-1);
-  };
+
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        background: `linear-gradient(135deg, ${theme.palette.background.default} 0%, ${theme.palette.background.paper} 100%)`,
-        pt: "64px", // Add padding top to account for fixed header
-      }}
-    >
-      <header
-        className={`bg-blue-100 dark:bg-gray-800 shadow-lg fixed top-0 ${
-          isCollapsed ? "left-[80px]" : "left-[250px]"
-        } right-0 z-10 transition-all duration-300`}
-      >
-        <div className="px-3 py-2 sm:p-4 flex items-center justify-between">
-          <div className="flex items-center space-x-1 sm:space-x-2">
-            <div className="flex items-center space-x-2 sm:space-x-4">
-              {/* <button
-                onClick={goBack}
-                className="p-1 sm:p-2 group rounded-full bg-transparent hover:bg-blue-500 dark:hover:bg-gray-700 focus:outline-none transition-colors"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500 group-hover:text-white dark:text-gray-300"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                  />
-                </svg>
-              </button> */}
-            </div>
-            <h1 className="text-base sm:text-xl font-semibold ml-1 sm:ml-3 text-gray-800 dark:text-white truncate">
-              Simulation
-            </h1>
-          </div>
+    <div className="min-h-screen bg-background pt-8">
+      <style dangerouslySetInnerHTML={{ __html: fadeInAnimation }} />
+      <Header isCollapsed={isCollapsed} name="Simulation" />
 
-          <div className="flex items-center space-x-2 sm:space-x-4">
-            {/* Add additional header items here */}
-          </div>
-        </div>
-      </header>
-
-      <Container maxWidth="xl" sx={{ py: 6 }}>
+      <div className="container mx-auto px-4 py-6 flex flex-col justify-center">
         {loading ? (
-          <Box
-            display="flex"
-            justifyContent="center"
-            alignItems="center"
-            minHeight="60vh"
-          >
-            <CircularProgress />
-          </Box>
+          <div className="flex justify-center items-center min-h-[60vh]">
+            <Loader className="h-12 w-12 animate-spin text-primary" />
+          </div>
         ) : error ? (
-          <Box
-            display="flex"
-            justifyContent="center"
-            alignItems="center"
-            minHeight="60vh"
-          >
-            <Alert severity="error">{error}</Alert>
-          </Box>
-        ) : availableSimulations.length === 0 ? (
-          <Box
-            display="flex"
-            justifyContent="center"
-            alignItems="center"
-            minHeight="60vh"
-          >
-            <Alert severity="info">
-              No simulations are available for your account. Please contact your
-              administrator.
+          <div className="flex justify-center items-center min-h-[60vh]">
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
             </Alert>
-          </Box>
+          </div>
+        ) : availableSimulations.length === 0 ? (
+          <div className="flex justify-center items-center min-h-[60vh] w-fit">
+            <Alert>
+              <AlertDescription>
+                No simulations are available for your account. Please contact
+                your administrator.
+              </AlertDescription>
+            </Alert>
+          </div>
         ) : (
-          <Grid container spacing={4}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {availableSimulations.map((simulation, index) => (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={simulation.id}>
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
+              <div key={simulation.id} className="h-full">
+                <div
+                  className="h-full transform transition-all duration-300 hover:scale-[1.03] hover:shadow-lg"
+                  style={{
+                    animation: `fadeIn 0.5s ease-out forwards`,
+                    animationDelay: `${index * 100}ms`,
+                    opacity: 0,
+                  }}
                 >
                   <Card
-                    component={motion.div}
-                    whileHover={{
-                      scale: 1.03,
-                      boxShadow: theme.shadows[10],
-                    }}
-                    whileTap={{ scale: 0.98 }}
-                    sx={{
-                      height: "100%",
-                      display: "flex",
-                      flexDirection: "column",
-                      cursor: "pointer",
-                      position: "relative",
-                      overflow: "hidden",
-                      borderRadius: 4,
-                      background: `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
-                      boxShadow: theme.shadows[4],
-                      "&::before": {
-                        content: '""',
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        height: 4,
-                        background: simulation.color,
-                      },
-                    }}
+                    className="group h-full flex flex-col cursor-pointer overflow-hidden border border-background rounded-md relative min-h-100"
                     onClick={() =>
                       handleSimulationCardClick(
                         simulation.name,
@@ -277,65 +217,40 @@ const SimulationsPage = () => {
                         simulation.path
                       )
                     }
+                    style={{
+                      backgroundImage: `url(${simulation.image})`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                    }}
                   >
-                    <Box
-                      sx={{
-                        p: 4,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        background: `linear-gradient(135deg, ${simulation.color}22 0%, ${simulation.color}11 100%)`,
-                      }}
-                    >
-                      <Typography variant="h2" sx={{ fontSize: "3rem" }}>
-                        {simulation.icon}
-                      </Typography>
-                    </Box>
-                    <CardContent sx={{ flexGrow: 1, p: 3 }}>
-                      <Typography
-                        gutterBottom
-                        variant="h6"
-                        component="h2"
-                        sx={{
-                          fontWeight: 600,
-                          color: theme.palette.text.primary,
-                          mb: 2,
-                        }}
-                      >
-                        {simulation.title}
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: theme.palette.text.secondary,
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        {simulation.description}
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              </Grid>
+                    {/* Overlay for better text readability */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/30 backdrop-grayscale transition-all duration-300 group-hover:backdrop-grayscale-0 group-hover:from-black/60 group-hover:to-black/20"></div>
+
+                    <div className="relative flex flex-col justify-end h-full w-full z-10">
+                      <CardContent className="p-4">
+                        <h2 className="text-xl font-semibold text-white mb-2">
+                          {simulation.title}
+                        </h2>
+                        <p className="text-sm text-white/80 leading-relaxed">
+                          {simulation.description}
+                        </p>
+                      </CardContent>
+                    </div>
+                  </Card>{" "}
+                </div>
+              </div>
             ))}
-          </Grid>
+          </div>
         )}
-      </Container>
-      <Snackbar
-        open={openSnackbar}
-        autoHideDuration={6000}
-        onClose={() => setOpenSnackbar(false)}
-        anchorOrigin={{ vertical: "top", horizontal: "center" }}
-      >
-        <Alert
-          severity="warning"
-          variant="filled"
-          onClose={() => setOpenSnackbar(false)}
-        >
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
-    </Box>
+      </div>
+      <Toaster
+        position="bottom-right"
+        theme={theme}
+        toastOptions={{
+          className: "bg-background text-primary font-rubik",
+        }}
+      />
+    </div>
   );
 };
 

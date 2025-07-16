@@ -18,7 +18,6 @@ import ChilledWaterPage from "./pages/ChilledWaterPage";
 import Login from "./components/Login";
 import SignUp from "./components/SignUp";
 import AnalyticsPage from "./pages/AnalyticsPage";
-// Import OCR test for debugging
 import "./utils/ocrTest.js";
 import TrainingPage from "./pages/TrainingPage";
 import SettingsPage from "./pages/SettingsPage";

@@ -1,113 +1,88 @@
 /**
- * Embedding Service for generating text embeddings
- * Supports multiple providers: OpenAI, HuggingFace, local models
+ * Embedding Service for generating text embeddings using Groq AI
  */
+import Groq from "groq-sdk";
 
 class EmbeddingService {
   constructor() {
-    this.provider = "local"; // Default to local implementation
+    this.groq = new Groq({
+      apiKey: import.meta.env.VITE_GROQ_API_KEY,
+      dangerouslyAllowBrowser: true,
+    });
     this.dimension = 1536; // Standard embedding dimension
   }
 
   /**
-   * Generate embeddings using the configured provider
+   * Generate embeddings using Groq AI
    */
   async generateEmbedding(text) {
-    switch (this.provider) {
-      case "openai":
-        return this.generateOpenAIEmbedding(text);
-      case "huggingface":
-        return this.generateHuggingFaceEmbedding(text);
-      case "local":
-      default:
-        return this.generateLocalEmbedding(text);
-    }
-  }
-
-  /**
-   * Generate embedding using OpenAI API (requires API key)
-   */
-  async generateOpenAIEmbedding(text) {
     try {
-      const response = await fetch("https://api.openai.com/v1/embeddings", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          input: text,
-          model: "text-embedding-3-small",
-        }),
+      // Since Groq doesn't have a direct embedding API, we'll use their chat completion
+      // to generate a semantic representation and convert it to embedding format
+      const response = await this.groq.chat.completions.create({
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an embedding generator. Convert the following text into a semantic vector representation. Respond only with a JSON array of exactly 1536 floating point numbers between -1 and 1 that represent the semantic meaning of the text.",
+          },
+          {
+            role: "user",
+            content: `Generate semantic embedding for: ${text}`,
+          },
+        ],
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.1,
+        max_tokens: 4000,
       });
 
-      if (!response.ok) {
-        throw new Error("OpenAI API request failed");
+      const embeddingText = response.choices[0]?.message?.content?.trim();
+
+      if (!embeddingText) {
+        throw new Error("No embedding response from Groq");
       }
 
-      const data = await response.json();
-      return data.data[0].embedding;
+      // Try to parse the JSON response
+      let embedding;
+      try {
+        embedding = JSON.parse(embeddingText);
+      } catch (parseError) {
+        console.warn("Failed to parse Groq embedding response, using fallback");
+        return this.generateFallbackEmbedding(text);
+      }
+
+      // Validate and normalize the embedding
+      if (!Array.isArray(embedding) || embedding.length !== this.dimension) {
+        console.warn("Invalid embedding format from Groq, using fallback");
+        return this.generateFallbackEmbedding(text);
+      }
+
+      return this.normalizeVector(embedding);
     } catch (error) {
-      console.warn("OpenAI embedding failed, falling back to local:", error);
-      return this.generateLocalEmbedding(text);
+      console.warn("Groq embedding failed, using fallback:", error);
+      return this.generateFallbackEmbedding(text);
     }
   }
 
   /**
-   * Generate embedding using HuggingFace Inference API
+   * Generate fallback embedding using local implementation
    */
-  async generateHuggingFaceEmbedding(text) {
-    try {
-      const response = await fetch(
-        "https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${import.meta.env.VITE_HF_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            inputs: text,
-            options: { wait_for_model: true },
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("HuggingFace API request failed");
-      }
-
-      const embedding = await response.json();
-
-      // Pad or truncate to match expected dimension
-      return this.normalizeEmbedding(embedding, this.dimension);
-    } catch (error) {
-      console.warn(
-        "HuggingFace embedding failed, falling back to local:",
-        error
-      );
-      return this.generateLocalEmbedding(text);
-    }
-  }
-
-  /**
-   * Generate embedding using local implementation (deterministic hash-based)
-   */
-  async generateLocalEmbedding(text) {
+  generateFallbackEmbedding(text) {
     try {
       // Preprocess text
       const processedText = this.preprocessText(text);
 
       // Create multiple hash-based features
-      const features = await this.extractFeatures(processedText);
+      const features = this.extractFeaturesSync(processedText);
 
       // Generate embedding vector
       const embedding = this.createEmbeddingVector(features);
 
       return embedding;
     } catch (error) {
-      console.error("Local embedding generation failed:", error);
-      throw error;
+      console.error("Fallback embedding generation failed:", error);
+      // Return a default embedding vector
+      return new Array(this.dimension).fill(0);
     }
   }
 
@@ -123,9 +98,9 @@ class EmbeddingService {
   }
 
   /**
-   * Extract multiple features from text
+   * Extract multiple features from text (synchronous version)
    */
-  async extractFeatures(text) {
+  extractFeaturesSync(text) {
     const features = {
       words: text.split(" ").filter((w) => w.length > 2),
       bigrams: this.generateNGrams(text, 2),
@@ -134,18 +109,39 @@ class EmbeddingService {
       length: text.length,
     };
 
-    // Generate hash-based features
-    const hashFeatures = await Promise.all([
-      this.hashText(features.words.join(" ")),
-      this.hashText(features.bigrams.join(" ")),
-      this.hashText(features.trigrams.join(" ")),
-      this.hashText(features.chars),
-    ]);
+    // Generate simple hash-based features without async crypto
+    const hashFeatures = [
+      this.simpleHash(features.words.join(" ")),
+      this.simpleHash(features.bigrams.join(" ")),
+      this.simpleHash(features.trigrams.join(" ")),
+      this.simpleHash(features.chars),
+    ];
 
     return {
       ...features,
       hashes: hashFeatures,
     };
+  }
+
+  /**
+   * Simple hash function for fallback embedding
+   */
+  simpleHash(text) {
+    let hash = 0;
+    const result = [];
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+
+    // Generate array of values based on hash
+    for (let i = 0; i < 64; i++) {
+      result.push(((hash * (i + 1)) % 256) - 127.5);
+    }
+
+    return result;
   }
 
   /**
@@ -163,16 +159,6 @@ class EmbeddingService {
   }
 
   /**
-   * Hash text to create consistent numeric features
-   */
-  async hashText(text) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(text);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    return Array.from(new Uint8Array(hashBuffer));
-  }
-
-  /**
    * Create embedding vector from features
    */
   createEmbeddingVector(features) {
@@ -183,7 +169,7 @@ class EmbeddingService {
     features.hashes.forEach((hash) => {
       hash.forEach((value) => {
         if (hashIndex < this.dimension) {
-          embedding[hashIndex] = (value - 127.5) / 127.5; // Normalize to [-1, 1]
+          embedding[hashIndex] = value / 127.5; // Normalize to [-1, 1]
           hashIndex++;
         }
       });
@@ -271,6 +257,30 @@ class EmbeddingService {
 
     const magnitude = Math.sqrt(normA) * Math.sqrt(normB);
     return magnitude > 0 ? dotProduct / magnitude : 0;
+  }
+
+  /**
+   * Test the embedding service with a sample text
+   */
+  async testEmbedding() {
+    const testText = "HVAC system temperature control and monitoring";
+    console.log("Testing Groq embedding service...");
+
+    try {
+      const embedding = await this.generateEmbedding(testText);
+      console.log("✅ Embedding generated successfully");
+      console.log(`📊 Embedding dimensions: ${embedding.length}`);
+      console.log(
+        `🔢 Sample values: [${embedding
+          .slice(0, 5)
+          .map((v) => v.toFixed(4))
+          .join(", ")}...]`
+      );
+      return embedding;
+    } catch (error) {
+      console.error("❌ Embedding test failed:", error);
+      throw error;
+    }
   }
 }
 

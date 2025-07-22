@@ -6,6 +6,10 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Badge } from "./ui/badge";
 import { Alert } from "./ui/alert";
 import { Separator } from "./ui/separator";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
+import "highlight.js/styles/github.css";
 import {
   FileText,
   Send,
@@ -249,7 +253,7 @@ const HVACChatbot = () => {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full max-h-screen">
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-screen max-h-screen overflow-hidden">
       {/* Troubleshooting Modal */}
       {showTroubleshooting && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -261,15 +265,15 @@ const HVACChatbot = () => {
       )}
 
       {/* Documents Panel */}
-      <div className="lg:col-span-1">
-        <Card className="h-full">
-          <CardHeader>
+      <div className="lg:col-span-1 h-full overflow-hidden">
+        <Card className="h-full flex flex-col">
+          <CardHeader className="flex-shrink-0">
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
               HVAC Manuals
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="flex-1 overflow-hidden flex flex-col space-y-4">
             {/* Upload Status */}
             <DocumentUploadStatus
               isUploading={isUploading}
@@ -323,60 +327,62 @@ const HVACChatbot = () => {
             <Separator />
 
             {/* Documents List */}
-            <ScrollArea className="h-96">
-              <div className="space-y-2">
-                {documents.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No manuals uploaded yet
-                  </p>
-                ) : (
-                  documents.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                        selectedDocument?.id === doc.id
-                          ? "bg-primary/10 border-primary"
-                          : "hover:bg-muted/50"
-                      }`}
-                      onClick={() => handleDocumentSelect(doc)}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-2 flex-1">
-                          <FileIcon className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium truncate">
-                              {doc.filename}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(doc.uploaded_at).toLocaleDateString()}
-                            </p>
+            <div className="flex-1 overflow-hidden">
+              <ScrollArea className="h-full">
+                <div className="space-y-2 pr-2">
+                  {documents.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No manuals uploaded yet
+                    </p>
+                  ) : (
+                    documents.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                          selectedDocument?.id === doc.id
+                            ? "bg-primary/10 border-primary"
+                            : "hover:bg-muted/50"
+                        }`}
+                        onClick={() => handleDocumentSelect(doc)}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-2 flex-1">
+                            <FileIcon className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">
+                                {doc.filename}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(doc.uploaded_at).toLocaleDateString()}
+                              </p>
+                            </div>
                           </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteDocument(doc.id, doc.filename);
+                            }}
+                            className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteDocument(doc.id, doc.filename);
-                          }}
-                          className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Chat Panel */}
-      <div className="lg:col-span-3">
+      <div className="lg:col-span-3 h-full overflow-hidden">
         <Card className="h-full flex flex-col">
-          <CardHeader>
+          <CardHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <Bot className="h-5 w-5" />
@@ -390,7 +396,7 @@ const HVACChatbot = () => {
             </div>
           </CardHeader>
 
-          <CardContent className="flex-1 flex flex-col">
+          <CardContent className="flex-1 flex flex-col min-h-0 overflow-hidden">
             {!selectedDocument ? (
               <div className="flex-1 flex items-center justify-center">
                 <div className="text-center space-y-4">
@@ -405,89 +411,186 @@ const HVACChatbot = () => {
               </div>
             ) : (
               <>
-                {/* Messages */}
-                <ScrollArea className="flex-1 pr-4">
-                  <div className="space-y-4">
-                    {messages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={`flex gap-3 ${
-                          message.type === "user"
-                            ? "justify-end"
-                            : "justify-start"
-                        }`}
-                      >
-                        {message.type !== "user" && (
-                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            {message.type === "system" ? (
-                              <MessageCircle className="h-4 w-4" />
-                            ) : (
-                              <Bot className="h-4 w-4" />
-                            )}
-                          </div>
-                        )}
-
+                {/* Messages - Scrollable area */}
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <ScrollArea className="h-full">
+                    <div className="space-y-4 p-4 pb-0">
+                      {messages.map((message) => (
                         <div
-                          className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                          key={message.id}
+                          className={`flex gap-3 ${
                             message.type === "user"
-                              ? "bg-primary text-primary-foreground"
-                              : message.type === "system"
-                              ? "bg-muted"
-                              : message.type === "error"
-                              ? "bg-destructive/10 text-destructive"
-                              : "bg-muted"
+                              ? "justify-end"
+                              : "justify-start"
                           }`}
                         >
-                          <p className="text-sm whitespace-pre-wrap">
-                            {message.content}
-                          </p>
-                          <p className="text-xs opacity-70 mt-1">
-                            {message.timestamp.toLocaleTimeString()}
-                          </p>
-                        </div>
+                          {message.type !== "user" && (
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                              {message.type === "system" ? (
+                                <MessageCircle className="h-4 w-4" />
+                              ) : (
+                                <Bot className="h-4 w-4" />
+                              )}
+                            </div>
+                          )}
 
-                        {message.type === "user" && (
-                          <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                            <User className="h-4 w-4 text-primary-foreground" />
+                          <div
+                            className={`max-w-[85%] rounded-lg px-4 py-3 ${
+                              message.type === "user"
+                                ? "bg-primary text-primary-foreground"
+                                : message.type === "system"
+                                ? "bg-muted"
+                                : message.type === "error"
+                                ? "bg-destructive/10 text-destructive border border-destructive/20"
+                                : "bg-muted border"
+                            }`}
+                          >
+                            <div className="text-sm">
+                              {message.type === "assistant" ? (
+                                <div className="prose prose-sm max-w-none dark:prose-invert">
+                                  <ReactMarkdown
+                                    remarkPlugins={[remarkGfm]}
+                                    rehypePlugins={[rehypeHighlight]}
+                                    components={{
+                                      h1: ({ children }) => (
+                                        <h1 className="text-lg font-bold mb-2">
+                                          {children}
+                                        </h1>
+                                      ),
+                                      h2: ({ children }) => (
+                                        <h2 className="text-base font-semibold mb-2">
+                                          {children}
+                                        </h2>
+                                      ),
+                                      h3: ({ children }) => (
+                                        <h3 className="text-sm font-medium mb-1">
+                                          {children}
+                                        </h3>
+                                      ),
+                                      p: ({ children }) => (
+                                        <p className="mb-2 last:mb-0 leading-relaxed">
+                                          {children}
+                                        </p>
+                                      ),
+                                      ul: ({ children }) => (
+                                        <ul className="list-disc list-inside mb-2 space-y-1">
+                                          {children}
+                                        </ul>
+                                      ),
+                                      ol: ({ children }) => (
+                                        <ol className="list-decimal list-inside mb-2 space-y-1">
+                                          {children}
+                                        </ol>
+                                      ),
+                                      li: ({ children }) => (
+                                        <li className="leading-relaxed">
+                                          {children}
+                                        </li>
+                                      ),
+                                      code: ({ inline, children }) =>
+                                        inline ? (
+                                          <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">
+                                            {children}
+                                          </code>
+                                        ) : (
+                                          <code className="block bg-muted p-3 rounded-md text-xs font-mono whitespace-pre-wrap overflow-x-auto">
+                                            {children}
+                                          </code>
+                                        ),
+                                      pre: ({ children }) => (
+                                        <pre className="bg-muted p-3 rounded-md overflow-x-auto mb-2">
+                                          {children}
+                                        </pre>
+                                      ),
+                                      blockquote: ({ children }) => (
+                                        <blockquote className="border-l-4 border-primary/20 pl-4 italic mb-2">
+                                          {children}
+                                        </blockquote>
+                                      ),
+                                      strong: ({ children }) => (
+                                        <strong className="font-semibold">
+                                          {children}
+                                        </strong>
+                                      ),
+                                      em: ({ children }) => (
+                                        <em className="italic">{children}</em>
+                                      ),
+                                      table: ({ children }) => (
+                                        <table className="border-collapse border border-border mb-2 text-xs">
+                                          {children}
+                                        </table>
+                                      ),
+                                      th: ({ children }) => (
+                                        <th className="border border-border px-2 py-1 bg-muted font-medium text-left">
+                                          {children}
+                                        </th>
+                                      ),
+                                      td: ({ children }) => (
+                                        <td className="border border-border px-2 py-1">
+                                          {children}
+                                        </td>
+                                      ),
+                                    }}
+                                  >
+                                    {message.content}
+                                  </ReactMarkdown>
+                                </div>
+                              ) : (
+                                <div className="whitespace-pre-wrap leading-relaxed">
+                                  {message.content}
+                                </div>
+                              )}
+                            </div>
+                            <p className="text-xs opacity-70 mt-2 text-right">
+                              {message.timestamp.toLocaleTimeString()}
+                            </p>
                           </div>
-                        )}
-                      </div>
-                    ))}
 
-                    {isLoading && (
-                      <div className="flex gap-3 justify-start">
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Bot className="h-4 w-4" />
+                          {message.type === "user" && (
+                            <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mt-1">
+                              <User className="h-4 w-4 text-primary-foreground" />
+                            </div>
+                          )}
                         </div>
-                        <div className="bg-muted rounded-lg px-4 py-2">
-                          <div className="flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span className="text-sm">Thinking...</span>
+                      ))}
+
+                      {isLoading && (
+                        <div className="flex gap-3 justify-start">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center mt-1">
+                            <Bot className="h-4 w-4" />
+                          </div>
+                          <div className="bg-muted rounded-lg px-4 py-3 border">
+                            <div className="flex items-center gap-2">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span className="text-sm">Thinking...</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    <div ref={messagesEndRef} />
+                      <div ref={messagesEndRef} />
+                    </div>
+                  </ScrollArea>
+                </div>
+
+                {/* Input - Fixed at bottom */}
+                <div className="border-t pt-4 pb-2 px-4 bg-background">
+                  <div className="flex gap-2">
+                    <Input
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      placeholder="Ask a question about the HVAC manual..."
+                      disabled={isLoading}
+                      className="flex-1"
+                    />
+                    <Button
+                      onClick={handleSendMessage}
+                      disabled={isLoading || !inputMessage.trim()}
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
                   </div>
-                </ScrollArea>
-
-                {/* Input */}
-                <div className="flex gap-2 pt-4">
-                  <Input
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder="Ask a question about the HVAC manual..."
-                    disabled={isLoading}
-                    className="flex-1"
-                  />
-                  <Button
-                    onClick={handleSendMessage}
-                    disabled={isLoading || !inputMessage.trim()}
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
                 </div>
               </>
             )}

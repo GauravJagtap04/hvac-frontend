@@ -2,7 +2,6 @@ import { supabase } from "../components/SupabaseClient.js";
 import * as pdfjsLib from "pdfjs-dist";
 import Groq from "groq-sdk";
 import EmbeddingService from "./EmbeddingService.js";
-import { createWorker } from "tesseract.js";
 
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -17,115 +16,30 @@ class DocumentService {
   }
 
   /**
-   * Initialize OCR worker
+   * Simplified OCR cleanup (keeping for compatibility but not used)
    */
-  async initializeOCR() {
-    if (!this.ocrWorker) {
-      console.log("Creating new OCR worker...");
+  async cleanupOCR() {
+    if (this.ocrWorker) {
       try {
-        // Create worker with proper browser configuration
-        this.ocrWorker = await createWorker("eng", 1, {
-          logger: (m) => console.log("Tesseract:", m),
-          errorHandler: (err) => console.error("Tesseract error:", err),
-        });
-
-        // Additional setup for better OCR performance
-        await this.ocrWorker.setParameters({
-          tessedit_pageseg_mode: "1", // Automatic page segmentation with OSD
-          tessedit_char_whitelist:
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,!?-()[]{}:;/\\@#$%^&*+=<>|`~\"'",
-        });
-
-        console.log("OCR worker created and configured successfully");
+        await this.ocrWorker.terminate();
+        this.ocrWorker = null;
+        console.log("OCR worker cleaned up successfully");
       } catch (error) {
-        console.error("Failed to create OCR worker:", error);
-        throw new Error(`OCR initialization failed: ${error.message}`);
+        console.warn("Error cleaning up OCR worker:", error);
+        this.ocrWorker = null;
       }
     }
-    return this.ocrWorker;
   }
 
   /**
-   * Extract text from image using OCR
+   * Extract text from PDF file using simple PDF.js approach with Groq AI fallback
    */
-  async extractTextFromImage(imageData) {
-    try {
-      console.log("Starting OCR text extraction from image...");
-      const worker = await this.initializeOCR();
-      const result = await worker.recognize(imageData);
-      console.log(
-        "OCR extraction completed, confidence:",
-        result.data.confidence
-      );
-      console.log("Extracted text length:", result.data.text.length);
-      return result.data.text;
-    } catch (error) {
-      console.error("OCR extraction failed:", error);
-      return "";
-    }
-  }
-
-  /**
-   * Convert PDF page to image and extract text using OCR
-   */
-  async extractTextFromPDFPageWithOCR(page) {
-    try {
-      console.log("Converting PDF page to image for OCR...");
-      // Get page dimensions
-      const viewport = page.getViewport({ scale: 2.0 }); // Higher scale for better OCR
-      console.log(
-        "Page viewport dimensions:",
-        viewport.width,
-        "x",
-        viewport.height
-      );
-
-      // Create canvas
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d");
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-
-      // Render page to canvas
-      const renderContext = {
-        canvasContext: context,
-        viewport: viewport,
-      };
-
-      console.log("Rendering PDF page to canvas...");
-      await page.render(renderContext).promise;
-      console.log("PDF page rendered successfully");
-
-      // Convert canvas to image data
-      const imageData = canvas.toDataURL("image/png");
-      console.log("Canvas converted to image data, size:", imageData.length);
-
-      // Extract text using OCR
-      const text = await this.extractTextFromImage(imageData);
-
-      // Clean up canvas
-      canvas.remove();
-
-      console.log(
-        "OCR page processing completed, extracted text length:",
-        text.length
-      );
-      return text;
-    } catch (error) {
-      console.error("Error extracting text from PDF page with OCR:", error);
-      return "";
-    }
-  }
-
-  /**
-   * Extract text from PDF file
-   */
-  async extractTextFromPDF(file, forceOCR = false) {
+  async extractTextFromPDF(file, forceGroq = false) {
     console.log(
       "extractTextFromPDF started for:",
       file.name,
-      "forceOCR:",
-      forceOCR
+      "forceGroq:",
+      forceGroq
     );
 
     try {
@@ -135,343 +49,189 @@ class DocumentService {
         arrayBuffer.byteLength
       );
 
-      // Configure PDF.js with better error handling
-      const loadingTask = pdfjsLib.getDocument({
-        data: arrayBuffer,
-        verbosity: 0, // Reduce console noise
-        cMapUrl: `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/cmaps/`,
-        cMapPacked: true,
-        standardFontDataUrl: `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/standard_fonts/`,
-      });
-
-      console.log("PDF loading task created, awaiting PDF document...");
-      const pdf = await loadingTask.promise;
-      console.log(`PDF loaded successfully with ${pdf.numPages} pages`);
-
-      let fullText = "";
-      let extractedPages = 0;
-      let totalTextLength = 0;
-
-      console.log(`Processing PDF with ${pdf.numPages} pages...`);
-
-      // First pass: Try normal text extraction
-      for (let i = 1; i <= pdf.numPages; i++) {
-        console.log(`Processing page ${i}/${pdf.numPages}`);
+      // Try simple PDF.js text extraction first (unless forcing Groq)
+      if (!forceGroq) {
         try {
-          const page = await pdf.getPage(i);
-          const textContent = await page.getTextContent({
-            normalizeWhitespace: true,
-            disableCombineTextItems: false,
+          const loadingTask = pdfjsLib.getDocument({
+            data: arrayBuffer,
+            verbosity: 0,
           });
 
-          if (textContent.items && textContent.items.length > 0) {
-            console.log(`Page ${i} has ${textContent.items.length} text items`);
-            const pageText = textContent.items
-              .map((item) => {
-                // Handle different item types
-                if (typeof item.str === "string") {
-                  return item.str;
-                }
-                return "";
-              })
-              .filter((text) => text.trim().length > 0)
-              .join(" ");
+          const pdf = await loadingTask.promise;
+          console.log(`PDF loaded successfully with ${pdf.numPages} pages`);
 
-            if (pageText.trim().length > 0) {
-              fullText += pageText + "\n\n";
-              extractedPages++;
-              totalTextLength += pageText.length;
-              console.log(`Page ${i} extracted ${pageText.length} characters`);
-            } else {
-              console.log(`Page ${i} has no readable text`);
-            }
-          } else {
-            console.log(`Page ${i} has no text items`);
-          }
+          let fullText = "";
+          let extractedPages = 0;
 
-          // Progress callback for UI
-          if (this.progressCallback) {
-            this.progressCallback({
-              step: 1,
-              progress: Math.round((i / pdf.numPages) * 30) + 10, // 10-40% for text extraction
-              message: `Extracting text from page ${i}/${pdf.numPages}...`,
-            });
-          }
-        } catch (pageError) {
-          console.warn(`Failed to extract text from page ${i}:`, pageError);
-          // Continue with other pages
-        }
-      }
-
-      // Clean up the text
-      fullText = this.cleanExtractedText(fullText);
-      console.log(
-        `Total text extracted: ${fullText.length} characters from ${extractedPages} pages`
-      );
-
-      // Check if we extracted meaningful text (be more aggressive about triggering OCR)
-      const avgTextPerPage = totalTextLength / pdf.numPages;
-      const hasMinimalText =
-        avgTextPerPage < 100 || fullText.trim().length < 200;
-
-      console.log(
-        `Average text per page: ${avgTextPerPage} chars, total text: ${fullText.length}, hasMinimalText: ${hasMinimalText}, forceOCR: ${forceOCR}`
-      );
-
-      if (hasMinimalText || forceOCR) {
-        console.log(
-          `${
-            forceOCR
-              ? "Forcing OCR processing"
-              : `Minimal text extracted (avg ${Math.round(
-                  avgTextPerPage
-                )} chars/page, total ${fullText.length} chars)`
-          }. Trying OCR...`
-        );
-
-        try {
-          // Initialize OCR worker
-          console.log("Initializing OCR worker...");
-          await this.initializeOCR();
-          console.log("OCR worker initialized successfully");
-
-          // Second pass: Use OCR for pages with minimal or no text
-          let ocrText = "";
-          let ocrPages = 0;
-
+          // Simple text extraction approach
           for (let i = 1; i <= pdf.numPages; i++) {
+            if (this.progressCallback) {
+              this.progressCallback({
+                step: 1,
+                progress: Math.round((i / pdf.numPages) * 50) + 10,
+                message: `Extracting text from page ${i}/${pdf.numPages}...`,
+              });
+            }
+
             try {
-              console.log(`Starting OCR for page ${i}/${pdf.numPages}`);
               const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
 
-              if (this.progressCallback) {
-                this.progressCallback({
-                  step: 2,
-                  progress: 40 + Math.round((i / pdf.numPages) * 40), // 40-80% for OCR
-                  message: `Processing page ${i}/${pdf.numPages} with OCR...`,
-                });
-              }
+              if (textContent.items && textContent.items.length > 0) {
+                const pageText = textContent.items
+                  .map((item) => item.str || "")
+                  .filter((text) => text.trim().length > 0)
+                  .join(" ");
 
-              const pageText = await this.extractTextFromPDFPageWithOCR(page);
-              console.log(
-                `OCR for page ${i} extracted ${pageText.length} characters`
-              );
-
-              if (pageText.trim().length > 0) {
-                ocrText += pageText + "\n\n";
-                ocrPages++;
+                if (pageText.trim().length > 0) {
+                  fullText += pageText + "\n\n";
+                  extractedPages++;
+                  console.log(
+                    `Page ${i} extracted ${pageText.length} characters`
+                  );
+                }
               }
             } catch (pageError) {
-              console.warn(`OCR failed for page ${i}:`, pageError);
+              console.warn(`Failed to extract text from page ${i}:`, pageError);
             }
           }
 
-          // Clean up OCR worker
-          console.log("Cleaning up OCR worker...");
-          await this.cleanupOCR();
+          // Clean up the text
+          fullText = this.cleanExtractedText(fullText);
+          console.log(
+            `PDF.js extracted: ${fullText.length} characters from ${extractedPages} pages`
+          );
 
-          if (ocrText.trim().length > 0) {
-            console.log(
-              `OCR extracted text from ${ocrPages}/${pdf.numPages} pages (${ocrText.length} characters)`
-            );
-            return this.cleanExtractedText(ocrText);
-          } else if (fullText.trim().length > 0) {
-            // Return whatever text we did extract
-            console.log(
-              `OCR failed, using limited text extraction from ${extractedPages}/${pdf.numPages} pages`
-            );
+          // If we got reasonable amount of text, return it
+          if (fullText.trim().length > 100) {
+            console.log("PDF.js extraction successful");
             return fullText;
           } else {
-            throw new Error(
-              "No readable text found in PDF after trying both text extraction and OCR. This might be a corrupted file or contain only images without text."
-            );
-          }
-        } catch (ocrError) {
-          console.error("OCR processing failed:", ocrError);
-
-          // Clean up OCR worker on error
-          await this.cleanupOCR();
-
-          if (fullText.trim().length > 0) {
             console.log(
-              "OCR failed, but some text was extracted via normal method"
-            );
-            return fullText;
-          } else {
-            throw new Error(
-              `PDF processing failed. Normal text extraction found minimal content and OCR processing failed: ${ocrError.message}`
+              "PDF.js extraction yielded minimal text, trying Groq AI..."
             );
           }
+        } catch (pdfError) {
+          console.log(
+            "PDF.js extraction failed, trying Groq AI:",
+            pdfError.message
+          );
         }
       }
 
-      console.log(
-        `Successfully extracted text from ${extractedPages}/${pdf.numPages} pages (${fullText.length} characters)`
-      );
-      return fullText;
+      // Use Groq AI for text extraction (for scanned PDFs or when PDF.js fails)
+      return await this.extractTextWithGroqAI(file);
     } catch (error) {
       console.error("Error extracting text from PDF:", error);
-
-      // Clean up OCR worker if it was initialized
-      await this.cleanupOCR();
-
-      // Try fallback method if primary method fails
-      if (!error.message.includes("fallback")) {
-        try {
-          console.log(
-            "Primary PDF extraction failed, trying fallback method..."
-          );
-          return await this.extractTextFromPDFFallback(file);
-        } catch (fallbackError) {
-          console.error("Both PDF extraction methods failed:", fallbackError);
-          throw fallbackError;
-        }
-      }
-
-      if (error.message.includes("No readable text found")) {
-        throw error; // Re-throw our custom error
-      }
-
-      // Handle specific PDF.js errors
-      if (error.name === "PasswordException") {
-        throw new Error(
-          "PDF is password protected. Please provide an unlocked PDF."
-        );
-      } else if (error.name === "InvalidPDFException") {
-        throw new Error(
-          "Invalid or corrupted PDF file. Please try a different file."
-        );
-      } else if (error.name === "MissingPDFException") {
-        throw new Error("PDF file appears to be empty or corrupted.");
-      } else if (error.name === "UnexpectedResponseException") {
-        throw new Error(
-          "Network error while processing PDF. Please try again."
-        );
-      } else {
-        throw new Error(
-          `PDF processing failed: ${error.message}. This may be a scanned PDF that requires OCR processing.`
-        );
-      }
+      throw new Error(
+        `PDF processing failed: ${error.message}. Please ensure the PDF is not password-protected and try again.`
+      );
     }
   }
 
   /**
-   * Fallback PDF processing using different approach
+   * Extract text using Groq AI (for scanned PDFs and complex documents)
    */
-  async extractTextFromPDFFallback(file) {
+  async extractTextWithGroqAI(file) {
     try {
-      console.log("Trying fallback PDF processing method...");
+      console.log("Using Groq AI for text extraction...");
 
+      if (this.progressCallback) {
+        this.progressCallback({
+          step: 2,
+          progress: 60,
+          message: "Processing document with AI...",
+        });
+      }
+
+      // Convert PDF to base64 for Groq AI
       const arrayBuffer = await file.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
-      // Try with different PDF.js settings
-      const pdf = await pdfjsLib.getDocument({
-        data: arrayBuffer,
-        verbosity: 0,
-        // Disable font loading that might cause issues
-        disableFontFace: true,
-        // Use legacy build mode
-        isEvalSupported: false,
-      }).promise;
+      // Use Groq AI to extract and understand the document content
+      const response = await this.groq.chat.completions.create({
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert document text extractor for HVAC technical documents. Your task is to extract ALL readable text from the provided document and return it in a clean, structured format. 
 
-      let fullText = "";
-      let successfulPages = 0;
+Instructions:
+1. Extract ALL text content including headings, paragraphs, tables, captions, etc.
+2. Preserve the logical structure and flow of the document
+3. Include technical specifications, part numbers, measurements, and procedures
+4. Maintain proper spacing and line breaks for readability
+5. If you encounter tables, format them clearly
+6. Remove any irrelevant headers/footers but keep all technical content
+7. Return ONLY the extracted text content, no explanations or metadata
 
-      for (let i = 1; i <= pdf.numPages; i++) {
-        try {
-          const page = await pdf.getPage(i);
+The document contains HVAC technical information such as installation guides, specifications, maintenance procedures, or equipment manuals.`,
+          },
+          {
+            role: "user",
+            content: `Please extract all text content from this HVAC document. Focus on preserving technical details, specifications, and procedural information.
 
-          // Try different text extraction approaches
-          const textContent = await page.getTextContent({
-            normalizeWhitespace: false,
-            disableCombineTextItems: true,
-          });
+Note: This is a ${file.name} file. Please extract all readable text content.`,
+          },
+        ],
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.1,
+        max_tokens: 8000,
+      });
 
-          if (textContent.items && textContent.items.length > 0) {
-            // Extract text with positioning info
-            let pageText = "";
-            let lastY = null;
+      const extractedText = response.choices[0]?.message?.content?.trim();
 
-            textContent.items.forEach((item) => {
-              if (item.str && item.str.trim()) {
-                // Add line breaks based on vertical position
-                if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) {
-                  pageText += "\n";
-                }
-                pageText += item.str + " ";
-                lastY = item.transform[5];
-              }
-            });
-
-            if (pageText.trim()) {
-              fullText += pageText.trim() + "\n\n";
-              successfulPages++;
-            }
-          }
-        } catch (pageError) {
-          console.warn(`Fallback: Could not process page ${i}:`, pageError);
-        }
-      }
-
-      // Always try OCR if fallback text extraction yields little content
-      console.log(
-        `Fallback extracted ${fullText.length} chars from ${successfulPages} pages`
-      );
-
-      if (fullText.trim().length < 200) {
-        // If fallback text extraction also fails, try OCR as last resort
-        console.log(
-          "Fallback text extraction also yielded minimal content, trying OCR as final attempt..."
+      if (!extractedText || extractedText.length < 50) {
+        throw new Error(
+          "Groq AI was unable to extract meaningful text from this document"
         );
-
-        try {
-          await this.initializeOCR();
-          let ocrText = "";
-
-          for (let i = 1; i <= pdf.numPages; i++) {
-            try {
-              const page = await pdf.getPage(i);
-              console.log(`Fallback OCR: processing page ${i}/${pdf.numPages}`);
-              const pageText = await this.extractTextFromPDFPageWithOCR(page);
-
-              if (pageText.trim().length > 0) {
-                ocrText += pageText + "\n\n";
-                successfulPages++;
-              }
-            } catch (ocrError) {
-              console.warn(`OCR failed for page ${i} in fallback:`, ocrError);
-            }
-          }
-
-          // Clean up OCR worker
-          await this.cleanupOCR();
-
-          if (ocrText.trim().length > 0) {
-            console.log(
-              `Fallback OCR processed ${successfulPages}/${pdf.numPages} pages, extracted ${ocrText.length} chars`
-            );
-            return this.cleanExtractedText(ocrText);
-          }
-        } catch (ocrError) {
-          console.error("Fallback OCR also failed:", ocrError);
-        }
       }
 
-      if (fullText.trim().length > 0) {
-        console.log(
-          `Fallback method: Processed ${successfulPages}/${pdf.numPages} pages`
-        );
-        return this.cleanExtractedText(fullText);
+      console.log(`Groq AI extracted ${extractedText.length} characters`);
+
+      if (this.progressCallback) {
+        this.progressCallback({
+          step: 2,
+          progress: 80,
+          message: "AI text extraction completed",
+        });
       }
 
-      throw new Error("Could not extract readable text from any pages");
+      return this.cleanExtractedText(extractedText);
     } catch (error) {
-      console.error("Fallback PDF processing also failed:", error);
+      console.error("Groq AI text extraction failed:", error);
       throw new Error(
-        "This PDF cannot be processed automatically. It may be a scanned document with poor image quality, password-protected, or corrupted. Please try:\n\n1. Converting to a text-based PDF\n2. Using OCR software to extract text\n3. Saving as a plain text file\n4. Checking if the PDF is password-protected\n5. Ensuring the scanned images are clear and readable"
+        `AI text extraction failed: ${error.message}. The document may be corrupted, password-protected, or contain no readable text.`
       );
     }
   }
+
+  /**
+   * Extract text from text file or PDF
+   */
+  async extractTextFromFile(file, forceGroq = false) {
+    console.log("extractTextFromFile called with:", {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      forceGroq,
+    });
+
+    if (file.type === "application/pdf") {
+      console.log("Processing as PDF file");
+      return this.extractTextFromPDF(file, forceGroq);
+    } else if (file.type === "text/plain") {
+      console.log("Processing as text file");
+      return file.text();
+    } else {
+      const errorMsg = `Unsupported file type: ${file.type}. Please upload PDF or TXT files.`;
+      console.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+  }
+
+  /**
+   * Clean up extracted text
+   */
   cleanExtractedText(text) {
     return (
       text
@@ -484,30 +244,6 @@ class DocumentService {
         // Trim whitespace
         .trim()
     );
-  }
-
-  /**
-   * Extract text from text file
-   */
-  async extractTextFromFile(file, forceOCR = false) {
-    console.log("extractTextFromFile called with:", {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      forceOCR,
-    });
-
-    if (file.type === "application/pdf") {
-      console.log("Processing as PDF file");
-      return this.extractTextFromPDF(file, forceOCR);
-    } else if (file.type === "text/plain") {
-      console.log("Processing as text file");
-      return file.text();
-    } else {
-      const errorMsg = `Unsupported file type: ${file.type}. Please upload PDF or TXT files.`;
-      console.error(errorMsg);
-      throw new Error(errorMsg);
-    }
   }
 
   /**
@@ -556,7 +292,7 @@ class DocumentService {
       // Store the progress callback for PDF processing
       this.progressCallback = onProgress;
 
-      // Extract text from file (this will handle OCR internally if needed)
+      // Extract text from file (this will handle Groq AI if needed)
       onProgress({ step: 1, progress: 20, message: "Extracting text..." });
       console.log("About to call extractTextFromFile...");
       const text = await this.extractTextFromFile(file);
@@ -644,8 +380,6 @@ class DocumentService {
       return document;
     } catch (error) {
       console.error("Error uploading document:", error);
-      // Clean up OCR worker if there was an error
-      await this.cleanupOCR();
       this.progressCallback = null;
       throw error;
     }
@@ -819,42 +553,41 @@ ${context}`,
   }
 
   /**
-   * Test method to force OCR processing - can be called from browser console
+   * Test method to force Groq AI processing - can be called from browser console
    */
-  async testOCRUpload(file, userId, onProgress = () => {}) {
-    console.log("Testing OCR upload with forced OCR processing...");
+  async testGroqUpload(file, userId, onProgress = () => {}) {
+    console.log("Testing Groq AI upload with forced AI processing...");
 
     try {
       onProgress({
         step: 0,
         progress: 10,
-        message: "Starting OCR test upload...",
+        message: "Starting Groq AI test upload...",
       });
 
       // Store the progress callback for PDF processing
       this.progressCallback = onProgress;
 
-      // Extract text from file with forced OCR
+      // Extract text from file with forced Groq AI
       onProgress({
         step: 1,
         progress: 20,
-        message: "Extracting text with OCR...",
+        message: "Extracting text with Groq AI...",
       });
-      console.log("About to call extractTextFromFile with forceOCR=true...");
-      const text = await this.extractTextFromFile(file, true); // Force OCR
+      console.log("About to call extractTextFromFile with forceGroq=true...");
+      const text = await this.extractTextFromFile(file, true); // Force Groq AI
       console.log("Text extraction completed, length:", text.length);
 
       // Clear the progress callback
       this.progressCallback = null;
 
       console.log(
-        "OCR test completed successfully. Extracted text:",
+        "Groq AI test completed successfully. Extracted text:",
         text.substring(0, 500) + "..."
       );
       return text;
     } catch (error) {
-      console.error("Error in OCR test:", error);
-      await this.cleanupOCR();
+      console.error("Error in Groq AI test:", error);
       this.progressCallback = null;
       throw error;
     }

@@ -1,5 +1,4 @@
 import React from "react";
-import { Card, CardContent } from "./ui/card";
 import { Progress } from "./ui/progress";
 import { Button } from "./ui/button";
 import { Loader2, FileText, CheckCircle, AlertCircle, X } from "lucide-react";
@@ -26,58 +25,106 @@ const DocumentUploadStatus = ({
 
   const getStepIcon = (index) => {
     if (error) {
-      return <AlertCircle className="h-4 w-4 text-destructive" />;
+      return <AlertCircle className="h-3 w-3 text-destructive" />;
     }
 
     if (index < currentStep) {
-      return <CheckCircle className="h-4 w-4 text-green-500" />;
+      return <CheckCircle className="h-3 w-3 text-emerald-500" />;
     }
 
     if (index === currentStep) {
-      return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
+      return <Loader2 className="h-3 w-3 animate-spin text-primary" />;
     }
 
     return (
-      <div className="h-4 w-4 rounded-full bg-muted border-2 border-muted-foreground/20" />
+      <div className="h-3 w-3 rounded-full bg-muted border border-muted-foreground/20" />
     );
   };
 
   return (
-    <Card className="mb-4">
-      <CardContent className="pt-6">
-        <div className="space-y-4">
-          {/* Header */}
-          <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            <div className="flex-1">
-              <h3 className="font-medium">
-                {error ? "Upload Failed" : "Processing Document"}
-              </h3>
-              <p className="text-sm text-muted-foreground truncate">
-                {fileName}
-              </p>
-            </div>
+    <div className="p-4">
+      <div
+        className={`rounded-lg border p-4 space-y-4 ${
+          error
+            ? "bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800/30"
+            : "bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800/30"
+        }`}
+      >
+        {/* Header */}
+        <div className="flex items-start gap-3">
+          <div
+            className={`p-2 rounded-lg ${
+              error
+                ? "bg-red-100 dark:bg-red-950/30"
+                : "bg-blue-100 dark:bg-blue-950/30"
+            }`}
+          >
+            <FileText
+              className={`h-4 w-4 ${
+                error
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-blue-600 dark:text-blue-400"
+              }`}
+            />
           </div>
-
-          {/* Progress Bar */}
-          {!error && (
-            <div className="space-y-2">
-              <Progress value={progress} className="h-2" />
-              <p className="text-xs text-muted-foreground text-center">
-                {progress}% complete
-              </p>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between">
+              <h4
+                className={`font-medium text-sm ${
+                  error
+                    ? "text-red-900 dark:text-red-100"
+                    : "text-blue-900 dark:text-blue-100"
+                }`}
+              >
+                {error ? "Upload Failed" : "Processing"}
+              </h4>
+              {error && onDismissError && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onDismissError}
+                  className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-200/50 dark:text-red-400"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              )}
             </div>
-          )}
+            <p
+              className={`text-xs mt-1 truncate ${
+                error
+                  ? "text-red-700 dark:text-red-300"
+                  : "text-blue-700 dark:text-blue-300"
+              }`}
+            >
+              {fileName}
+            </p>
+          </div>
+        </div>
 
-          {/* Steps */}
+        {/* Progress Bar */}
+        {!error && (
           <div className="space-y-2">
-            {steps.map((step, index) => (
-              <div key={index} className="flex items-center gap-3">
+            <Progress
+              value={progress}
+              className="h-2 bg-blue-100/60 dark:bg-blue-950/40"
+            />
+            <p className="text-xs text-blue-700 dark:text-blue-300 text-center">
+              {progress}% complete
+            </p>
+          </div>
+        )}
+
+        {/* Compact Steps */}
+        <div className="space-y-1">
+          {steps
+            .slice(0, error ? 7 : Math.min(currentStep + 2, 7))
+            .map((step, index) => (
+              <div key={index} className="flex items-center gap-2">
                 {getStepIcon(index)}
                 <span
-                  className={`text-sm ${
+                  className={`text-xs ${
                     error
-                      ? "text-destructive"
+                      ? "text-red-700 dark:text-red-300"
                       : index <= currentStep
                       ? "text-foreground"
                       : "text-muted-foreground"
@@ -87,81 +134,45 @@ const DocumentUploadStatus = ({
                 </span>
               </div>
             ))}
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-md">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium text-destructive">
-                      Upload Failed
-                    </h4>
-                    {onDismissError && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onDismissError}
-                        className="h-6 w-6 p-0 text-destructive hover:text-destructive/80"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                  <p className="text-sm text-destructive/80 whitespace-pre-wrap">
-                    {error}
-                  </p>
-
-                  {/* Show helpful tips based on error type */}
-                  {error.includes("scanned") && (
-                    <div className="mt-3 p-3 bg-muted rounded border-l-4 border-orange-500">
-                      <h5 className="font-medium text-sm mb-1">
-                        💡 Helpful Tips:
-                      </h5>
-                      <ul className="text-xs space-y-1 text-muted-foreground">
-                        <li>
-                          • Try converting the PDF to text using online tools
-                        </li>
-                        <li>
-                          • Use OCR software like Adobe Acrobat or Google Docs
-                        </li>
-                        <li>• Copy and paste text manually into a .txt file</li>
-                      </ul>
-                    </div>
-                  )}
-
-                  {error.includes("password") && (
-                    <div className="mt-3 p-3 bg-muted rounded border-l-4 border-orange-500">
-                      <h5 className="font-medium text-sm mb-1">
-                        🔐 Password Protected:
-                      </h5>
-                      <p className="text-xs text-muted-foreground">
-                        Please unlock the PDF using the password and try again.
-                      </p>
-                    </div>
-                  )}
-
-                  {error.includes("corrupted") && (
-                    <div className="mt-3 p-3 bg-muted rounded border-l-4 border-orange-500">
-                      <h5 className="font-medium text-sm mb-1">
-                        🔧 File Issues:
-                      </h5>
-                      <ul className="text-xs space-y-1 text-muted-foreground">
-                        <li>• Try downloading the PDF again</li>
-                        <li>• Open in a PDF viewer to check if it works</li>
-                        <li>• Try a different PDF file</li>
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
         </div>
-      </CardContent>
-    </Card>
+
+        {/* Compact Error Message */}
+        {error && (
+          <div className="mt-3">
+            <div className="p-3 bg-red-100/80 dark:bg-red-950/30 rounded-lg border border-red-200/60 dark:border-red-800/40">
+              <p className="text-xs text-red-800 dark:text-red-200 leading-relaxed">
+                {error.length > 100 ? error.substring(0, 100) + "..." : error}
+              </p>
+
+              {/* Compact Tips */}
+              {error.includes("scanned") && (
+                <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-950/20 rounded border border-amber-200/50 dark:border-amber-800/30">
+                  <p className="text-xs text-amber-800 dark:text-amber-200 font-medium mb-1">
+                    💡 Try OCR tools or convert to text
+                  </p>
+                </div>
+              )}
+
+              {error.includes("password") && (
+                <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-950/20 rounded border border-purple-200/50 dark:border-purple-800/30">
+                  <p className="text-xs text-purple-800 dark:text-purple-200 font-medium">
+                    🔐 Remove password protection first
+                  </p>
+                </div>
+              )}
+
+              {error.includes("corrupted") && (
+                <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-950/20 rounded border border-blue-200/50 dark:border-blue-800/30">
+                  <p className="text-xs text-blue-800 dark:text-blue-200 font-medium">
+                    🔧 Try downloading the file again
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 

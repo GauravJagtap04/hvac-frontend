@@ -23,6 +23,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  MessageCircle,
 } from "lucide-react";
 
 const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
@@ -200,6 +201,17 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               to="/training"
               icon={<Book size={24} className={isCollapsed ? "mx-auto" : ""} />}
               text="Training"
+              className="bg-primary text-background"
+            />
+            <MenuItem
+              to="/chatbot"
+              icon={
+                <MessageCircle
+                  size={24}
+                  className={isCollapsed ? "mx-auto" : ""}
+                />
+              }
+              text="HVAC Assistant"
               className="bg-primary text-background"
             />
             <MenuItem

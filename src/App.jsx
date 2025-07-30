@@ -18,8 +18,10 @@ import ChilledWaterPage from "./pages/ChilledWaterPage";
 import Login from "./components/Login";
 import SignUp from "./components/SignUp";
 import AnalyticsPage from "./pages/AnalyticsPage";
+import "./utils/ocrTest.js";
 import TrainingPage from "./pages/TrainingPage";
 import SettingsPage from "./pages/SettingsPage";
+import ChatbotPage from "./pages/ChatbotPage";
 
 // Create router with all routes
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -56,6 +58,7 @@ const router = createBrowserRouter(
         />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/training" element={<TrainingPage />} />
+        <Route path="/chatbot" element={<ChatbotPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>

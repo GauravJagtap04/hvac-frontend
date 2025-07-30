@@ -274,7 +274,7 @@ const HVACChatbot = () => {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-[calc(100vh-140px)] min-h-[500px] bg-background">
       {/* Troubleshooting Modal */}
       {showTroubleshooting && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in-0 duration-200">
